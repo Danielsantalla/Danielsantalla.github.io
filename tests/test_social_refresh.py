@@ -190,7 +190,10 @@ class SocialTests(unittest.TestCase):
         page = (ROOT / 'privacy/index.html').read_text()
         self.assertIn('agree to be bound by the', page)
         self.assertIn('https://www.youtube.com/t/terms', page)
-        self.assertIn('accept this privacy policy and those terms before', page)
+        self.assertIn('agree to this privacy policy', page)
+        self.assertIn('Public statistics and comments appear automatically', page)
+        self.assertNotIn('Agree and show YouTube', page)
+        self.assertIn('rather than Google-hosted profile images', page)
         self.assertIn('https://policies.google.com/privacy', page)
 
     def test_truncated_success_response_is_scrubbed(self):

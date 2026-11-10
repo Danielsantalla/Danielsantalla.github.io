@@ -19,26 +19,14 @@
     node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer';
     return node;
   };
-  let youtubeConsent = false;
-  const renderers = [];
-  function youtubeConsentPrompt() {
-    const prompt = element('div', 'youtube-consent');
-    prompt.append(element('p', 'sample-note', 'YouTube statistics, comments and author images are optional. Images may contact Google and share your IP address.'));
-    const terms = element('p', 'sample-note', 'By selecting “Agree and show YouTube”, you agree to this site’s privacy policy and to be bound by the YouTube Terms of Service.');
-    terms.append(link('/privacy/', 'Privacy and YouTube terms'), link('https://www.youtube.com/t/terms', 'YouTube Terms of Service'));
-    const button = element('button', 'load-embed', 'Agree and show YouTube'); button.type = 'button';
-    button.addEventListener('click', () => {
-      if (youtubeConsent) return;
-      youtubeConsent = true;
-      prompt.hidden = true;
-      renderers.forEach(render => render(true));
-    });
-    prompt.append(terms, button);
-    return prompt;
+  function youtubeLegalLinks() {
+    const notice = element('p', 'social-legal');
+    notice.append(link('/privacy/', 'Privacy'), link('https://www.youtube.com/t/terms', 'YouTube terms'));
+    return notice;
   }
-  // Consent controls stay outside tutorial links to avoid nested interactive elements.
+  // Keep disclosure links outside tutorial links and away from the statistics.
   const listing = slots.map(slot => slot.closest('.lesson-list')).find(Boolean);
-  if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) listing.before(youtubeConsentPrompt());
+  if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) listing.after(youtubeLegalLinks());
   const safeURL = (value, hosts, path) => {
     try {
       const url = new URL(value);
@@ -84,13 +72,12 @@
     const ids = {x: xId(slot.dataset.tweetMetrics) ? slot.dataset.tweetMetrics : null, youtube: ytId(slot.dataset.youtubeId) ? slot.dataset.youtubeId : null};
     const platforms = ['x','youtube'].filter(platform => ids[platform]);
     const get = platform => {
-      if (platform === 'youtube' && !youtubeConsent) return null;
       const entry = ids[platform] && cache[platform]?.[ids[platform]];
       return fresh(entry) ? entry : null;
     };
     const isList = !!slot.closest('.lesson-list');
     let selectedPlatform;
-    function render(focus = false) {
+    function render() {
       slot.replaceChildren();
       if (isList) {
         slot.className = 'combined-metrics';
@@ -123,10 +110,6 @@
         button.id = `social-${index}-${platform}-tab`; panel.id = `social-${index}-${platform}-panel`;
         button.setAttribute('aria-controls',panel.id); panel.setAttribute('aria-labelledby',button.id);
         tabs.append(button); buttons.push(button); panels.push(panel);
-        if (platform === 'youtube' && !youtubeConsent) {
-          panel.append(youtubeConsentPrompt(), link(source(platform, ids[platform]), 'Visit YouTube without loading data here ↗'));
-          continue;
-        }
         const entry = get(platform), available = metrics(entry, platform);
         if (available.length) {
           const stats = element('div','platform-metrics');
@@ -151,9 +134,9 @@
               const target = n < 3 ? panel : more;
               if (platform === 'youtube') {
                 const article = element('article','sample-comment');
-                const avatarURL = safeURL(comment.author_image_url,['yt3.ggpht.com','yt3.googleusercontent.com','lh3.googleusercontent.com']);
-                const avatar = element(avatarURL ? 'img' : 'span','sample-avatar',avatarURL ? undefined : comment.author.slice(0,1));
-                if (avatarURL) { avatar.src = avatarURL; avatar.alt = ''; avatar.width = 24; avatar.height = 24; avatar.loading = 'lazy'; avatar.referrerPolicy = 'no-referrer'; }
+                // Initials keep comments readable without requests to Google image servers.
+                const avatar = element('span', 'sample-avatar', comment.author.slice(0,1));
+                avatar.setAttribute('aria-hidden', 'true');
                 const body = element('div'), byline = element('div','sample-byline');
                 const authorURL = safeURL(comment.author_channel_url,['www.youtube.com','youtube.com'],/^\/(channel\/UC[A-Za-z0-9_-]+|@[A-Za-z0-9_.%-]+)\/?$/);
                 const author = element('strong','',comment.author);
@@ -189,6 +172,7 @@
           } else panel.append(element('p','sample-note',entry.comments_status === 'disabled' ? 'Comments are disabled on this video.' : 'No comments are available in this snapshot.'));
         }
         if (ids[platform]) panel.append(link(source(platform,ids[platform]),`Join the conversation on ${label} ↗`));
+        if (platform === 'youtube') panel.append(youtubeLegalLinks());
       }
       function select(n, focus = false) {
         selectedPlatform = platforms[n];
@@ -207,13 +191,12 @@
         });
       });
       slot.append(tabs,...panels);
-      // Prefer a platform with fresh data without bypassing its consent gate.
+      // Prefer a platform with fresh data.
       const firstFresh = platforms.findIndex(platform => fresh(cache[platform]?.[ids[platform]]));
       const previous = platforms.indexOf(selectedPlatform);
       const fallback = Math.max(0, platforms.indexOf('youtube'));
-      select(previous >= 0 ? previous : (firstFresh < 0 ? fallback : firstFresh), focus && selectedPlatform === 'youtube');
+      select(previous >= 0 ? previous : (firstFresh < 0 ? fallback : firstFresh));
     }
-    renderers.push(render);
     render();
     // Remove a snapshot if it becomes stale while this page remains open.
     const expiries = platforms.map(p => cache[p]?.[ids[p]]).filter(e => fresh(e)).map(e => Date.parse(e.updated_at)+MAX_AGE-Date.now()+1);

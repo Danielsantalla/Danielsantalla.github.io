@@ -82,6 +82,6 @@
 .x-embed{max-width:100%}
 .platform-conversation .load-embed{font-size:11px}
 .platform-conversation button:focus-visible,.platform-conversation a:focus-visible,.platform-conversation summary:focus-visible{outline:2px solid #777;outline-offset:4px}
-.youtube-consent{margin:16px 0;color:#777;font-size:12px;line-height:1.6}
-.youtube-consent .conversation-source{display:inline-block;margin:6px 16px 6px 0}
-.youtube-consent button:focus-visible,.youtube-consent a:focus-visible{outline:2px solid #777;outline-offset:4px}
+
+.social-legal{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 0;font-size:11px;color:#777}
+.social-legal a:focus-visible{outline:2px solid #777;outline-offset:4px}
