@@ -97,6 +97,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
    r=await run({schema_version:1,x:{'12345':{...snapshot,metrics:{impression_count:55}}},youtube:{}},{list,yt:''});
    assert(r.slot.textContent.includes('55'));assert((list?r.slot.querySelector('.summary-metric-views').title:r.slot.querySelector('.platform-metrics').children[0].title).includes('impressions'));
  }
+ assert(!script.includes('youtubeLegalLinks'));assert(!script.includes('metrics-legend'));assert(!script.includes('social-legal'));
  assert(!script.includes('innerHTML'));assert(!script.includes('widgets.js'));assert(!script.includes('createTweet'));
  r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:12}}},youtube:{abcdefghijk:yt}},{list:true});
  assert.equal(r.slot.querySelectorAll('.platform-stat-line').length,0);assert.equal(r.slot.hidden,false);
@@ -181,10 +182,10 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const withAvatar={...yt,comments:[{...yt.comments[0],author_image_url:'https://yt3.ggpht.com/avatar'}]};
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:withAvatar}});
  assert.equal(r.slot.querySelector('.platform-tabs').children.find(n=>n.textContent==='YouTube').attributes['aria-selected'],'true');
- assert.equal(r.slot.querySelectorAll('.sample-comment').length,1);assert.equal(r.slot.querySelectorAll('.sample-avatar').length,1);assert(r.slot.textContent.includes('20'));assert(r.slot.textContent.includes('Privacy'));
+ assert.equal(r.slot.querySelectorAll('.sample-comment').length,1);assert.equal(r.slot.querySelectorAll('.sample-avatar').length,1);assert(r.slot.textContent.includes('20'));assert(!r.slot.textContent.includes('Privacy'));
  assert.equal(r.slot.querySelectorAll('.sample-avatar').filter(n=>n.tag==='img').length,0);
  assert.equal(r.slot.querySelectorAll('.youtube-consent').length,0);assert(!r.slot.textContent.includes('Agree and show YouTube'));
- assert.equal(r.slot.querySelectorAll('.social-legal').length,1);assert(!r.slot.textContent.includes('Updated'));assert(!r.slot.textContent.includes('refreshed weekly'));assert(r.slot.querySelectorAll('.platform-metrics').some(n=>n.children.some(c=>c.title.includes('Updated'))));assert.equal(r.head.children.length,0);assert.deepEqual(r.requests,['/data/social.json']);
+ assert.equal(r.slot.querySelectorAll('.social-legal').length,0);assert(!r.slot.textContent.includes('Updated'));assert(!r.slot.textContent.includes('refreshed weekly'));assert(r.slot.querySelectorAll('.platform-metrics').some(n=>n.children.some(c=>c.title.includes('Updated'))));assert.equal(r.head.children.length,0);assert.deepEqual(r.requests,['/data/social.json']);
  // Reloads and multiple tab switches require no agreement and do not duplicate comments.
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:withAvatar}});
  const repeatedTabs=r.slot.querySelector('.platform-tabs').children;
@@ -196,6 +197,6 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  assert.equal(r.slot.querySelectorAll('.sample-comment').length,1);
  const expiry=r.timers.find(t=>t.ms>1 && t.ms<10000);assert(expiry,'expiry timer must be scheduled');
  const actualNow=Date.now();r.context.Date=class extends Date{static now(){return actualNow+20000;}};expiry.fn();
- assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);assert(r.slot.textContent.includes('currently unavailable'));assert(r.slot.textContent.includes('YouTube terms'));
+ assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);assert(r.slot.textContent.includes('currently unavailable'));assert(!r.slot.textContent.includes('YouTube terms'));
  console.log('PASS: unavailable, stale, zero-vs-missing, unsafe text/URLs, comments, tabs, custom X metadata/security/entities/one-time retention, direct YouTube statistics/comments/listing, compact three-icon sums with explicit reach measures/partial data/overflow/expiry, no remote YouTube avatars, reload/repeat/expiry, no sources/offline');
 })().catch(e=>{console.error(e);process.exitCode=1});

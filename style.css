@@ -60,7 +60,7 @@
 /* Remove the divider above the X / YouTube tabs. */
 .sample-comments.platform-conversation{border-top:0}
 
-.tutorial-notes{margin:24px 0 18px;max-width:60ch}.tutorial-notes h2{font-size:13px;font-weight:500;color:#444;margin:0 0 7px}.tutorial-notes p{font-size:13px;line-height:1.7;color:#707070;margin:0}.archive p a{text-decoration:underline;text-underline-offset:3px}
+.tutorial-notes{margin:24px 0 18px;max-width:60ch}.tutorial-notes p{font-size:13px;line-height:1.7;color:#707070;margin:0}.archive p a{text-decoration:underline;text-underline-offset:3px}
 
 .tutorial-notes .tutorial-date{font-size:11px;color:#8b8b8b;margin-top:10px}
 
@@ -79,10 +79,11 @@
 .x-comment .x-comment-text a{font-size:inherit;text-decoration:underline}
 .platform-conversation button:focus-visible,.platform-conversation a:focus-visible,.platform-conversation summary:focus-visible{outline:2px solid #777;outline-offset:4px}
 
-.social-legal{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 0;font-size:11px;color:#777}
-.social-legal a:focus-visible{outline:2px solid #777;outline-offset:4px}
-.metrics-legend{flex-basis:100%;font-size:10px;color:#767676;line-height:1.6}
 
 .summary-metric{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;line-height:1.5;font-variant-numeric:tabular-nums}
 .summary-metric .metric-icon{display:block;flex:none;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .lesson-list>a>div{min-width:0}
+
+/* Keep tutorial source links and discussion tabs together, without stacked spacers. */
+.tutorial-notes+.media-links{padding-bottom:24px}
+.tutorial-notes+.media-links+.platform-conversation{margin-top:0;padding-top:0}

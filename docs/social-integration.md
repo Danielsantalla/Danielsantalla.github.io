@@ -4,7 +4,7 @@ Production uses GitHub Pages with API credentials only in Actions secrets. No to
 
 ## YouTube
 
-The normal Pages workflow refreshes YouTube weekly on Monday and performs cache-only deployments on other days. Source pushes and default manual deployments do not fetch either API. YouTube data expires after 14 days, below the API policy's 30 day refresh/delete limit. The interface displays public counts/comments directly, with initials instead of Google-hosted avatars and links to privacy and YouTube terms. No consent-state storage or social login is used.
+The normal Pages workflow refreshes YouTube weekly on Monday and performs cache-only deployments on other days. Source pushes and default manual deployments do not fetch either API. YouTube data expires after 14 days, below the API policy's 30 day refresh/delete limit. The interface displays public counts/comments directly, with initials instead of Google-hosted avatars. Privacy and YouTube terms remain available through the standard site-footer Privacy link, without repeated notice blocks beside social metrics. No consent-state storage or social login is used.
 
 ## X: one authorized import
 

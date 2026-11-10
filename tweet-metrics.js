@@ -19,11 +19,6 @@
     node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer';
     return node;
   };
-  function youtubeLegalLinks() {
-    const notice = element('p', 'social-legal');
-    notice.append(link('/privacy/', 'Privacy'), link('https://www.youtube.com/t/terms', 'YouTube terms'));
-    return notice;
-  }
   const safeURL = (value, hosts, path) => {
     try {
       const url = new URL(value);
@@ -269,7 +264,6 @@
           } else panel.append(element('p','sample-note',entry.comments_status === 'disabled' ? 'Comments are disabled on this video.' : 'No comments are available in this snapshot.'));
         }
         if (ids[platform]) panel.append(link(source(platform,ids[platform]),`Join the conversation on ${label} ↗`));
-        if (platform === 'youtube') panel.append(youtubeLegalLinks());
       }
       function select(n, focus = false) {
         selectedPlatform = platforms[n];
