@@ -19,6 +19,26 @@
     node.href = url; node.target = '_blank'; node.rel = 'noopener noreferrer';
     return node;
   };
+  let youtubeConsent = false;
+  const renderers = [];
+  function youtubeConsentPrompt() {
+    const prompt = element('div', 'youtube-consent');
+    prompt.append(element('p', 'sample-note', 'YouTube statistics, comments and author images are optional. Images may contact Google and share your IP address.'));
+    const terms = element('p', 'sample-note', 'By selecting “Agree and show YouTube”, you agree to this site’s privacy policy and to be bound by the YouTube Terms of Service.');
+    terms.append(link('/privacy/', 'Privacy and YouTube terms'), link('https://www.youtube.com/t/terms', 'YouTube Terms of Service'));
+    const button = element('button', 'load-embed', 'Agree and show YouTube'); button.type = 'button';
+    button.addEventListener('click', () => {
+      if (youtubeConsent) return;
+      youtubeConsent = true;
+      prompt.hidden = true;
+      renderers.forEach(render => render(true));
+    });
+    prompt.append(terms, button);
+    return prompt;
+  }
+  // Consent controls stay outside tutorial links to avoid nested interactive elements.
+  const listing = slots.map(slot => slot.closest('.lesson-list')).find(Boolean);
+  if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) listing.before(youtubeConsentPrompt());
   const safeURL = (value, hosts, path) => {
     try {
       const url = new URL(value);
@@ -64,11 +84,13 @@
     const ids = {x: xId(slot.dataset.tweetMetrics) ? slot.dataset.tweetMetrics : null, youtube: ytId(slot.dataset.youtubeId) ? slot.dataset.youtubeId : null};
     const platforms = ['x','youtube'].filter(platform => ids[platform]);
     const get = platform => {
+      if (platform === 'youtube' && !youtubeConsent) return null;
       const entry = ids[platform] && cache[platform]?.[ids[platform]];
       return fresh(entry) ? entry : null;
     };
     const isList = !!slot.closest('.lesson-list');
-    function render() {
+    let selectedPlatform;
+    function render(focus = false) {
       slot.replaceChildren();
       if (isList) {
         slot.className = 'combined-metrics';
@@ -99,6 +121,10 @@
         button.id = `social-${index}-${platform}-tab`; panel.id = `social-${index}-${platform}-panel`;
         button.setAttribute('aria-controls',panel.id); panel.setAttribute('aria-labelledby',button.id);
         tabs.append(button); buttons.push(button); panels.push(panel);
+        if (platform === 'youtube' && !youtubeConsent) {
+          panel.append(youtubeConsentPrompt(), link(source(platform, ids[platform]), 'Visit YouTube without loading data here ↗'));
+          continue;
+        }
         const entry = get(platform), available = metrics(entry, platform);
         if (available.length) {
           const stats = element('div','platform-metrics');
@@ -163,6 +189,7 @@
         if (ids[platform]) panel.append(link(source(platform,ids[platform]),`Join the conversation on ${label} ↗`));
       }
       function select(n, focus = false) {
+        selectedPlatform = platforms[n];
         buttons.forEach((button,i) => { button.setAttribute('aria-selected',String(i === n)); button.tabIndex = i === n ? 0 : -1; panels[i].hidden = i !== n; });
         if (focus) buttons[n].focus();
       }
@@ -179,11 +206,13 @@
       });
       slot.append(tabs,...panels);
       const firstFresh = platforms.findIndex(platform => get(platform));
-      select(firstFresh < 0 ? 0 : firstFresh);
+      const previous = platforms.indexOf(selectedPlatform);
+      select(previous >= 0 ? previous : (firstFresh < 0 ? 0 : firstFresh), focus && selectedPlatform === 'youtube');
     }
+    renderers.push(render);
     render();
     // Remove a snapshot if it becomes stale while this page remains open.
-    const expiries = ['x','youtube'].map(p => get(p)).filter(Boolean).map(e => Date.parse(e.updated_at)+MAX_AGE-Date.now()+1);
+    const expiries = platforms.map(p => cache[p]?.[ids[p]]).filter(e => fresh(e)).map(e => Date.parse(e.updated_at)+MAX_AGE-Date.now()+1);
     expiries.forEach(delay => setTimeout(render,Math.max(1,delay)));
   });
 })();

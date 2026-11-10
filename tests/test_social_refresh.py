@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -160,10 +161,37 @@ class SocialTests(unittest.TestCase):
 
     def test_only_weekly_schedule_refreshes_apis(self):
         workflow = (ROOT / '.github/workflows/pages.yml').read_text()
-        self.assertIn("cron: '23 6 * * 2-7'", workflow)
-        self.assertIn("if: github.event.schedule == '23 6 * * 1' ||", workflow)
-        self.assertIn("if: github.event.schedule != '23 6 * * 1' &&", workflow)
+        schedules = re.findall(r"cron:\s*'([^']+)'", workflow)
+        self.assertEqual(len(schedules), 2)
+        scheduled_days = {}
+        for schedule in schedules:
+            fields = schedule.split()
+            self.assertEqual(fields[:4], ['23', '6', '*', '*'])
+            self.assertEqual(len(fields), 5)
+            days = set()
+            for item in fields[4].split(','):
+                bounds = [int(value) for value in item.split('-')]
+                self.assertIn(len(bounds), [1, 2])
+                start, end = bounds[0], bounds[-1]
+                self.assertTrue(0 <= start <= end <= 6, 'GitHub weekdays must be 0–6')
+                days.update(range(start, end + 1))
+            scheduled_days[schedule] = days
+        refresh = re.findall(r"if: github.event.schedule == '([^']+)'", workflow)
+        cache_only = re.findall(r"if: github.event.schedule != '([^']+)'", workflow)
+        self.assertEqual(len(refresh), 1)
+        self.assertEqual(cache_only, refresh)
+        self.assertEqual(scheduled_days[refresh[0]], {1}, 'Only Monday refreshes APIs')
+        remaining = set().union(*(days for cron, days in scheduled_days.items() if cron != refresh[0]))
+        self.assertEqual(remaining, {0, 2, 3, 4, 5, 6})
+        self.assertFalse(remaining & scheduled_days[refresh[0]])
         self.assertIn('default: false', workflow)
+
+    def test_youtube_privacy_and_terms_notice(self):
+        page = (ROOT / 'privacy/index.html').read_text()
+        self.assertIn('agree to be bound by the', page)
+        self.assertIn('https://www.youtube.com/t/terms', page)
+        self.assertIn('accept this privacy policy and those terms before', page)
+        self.assertIn('https://policies.google.com/privacy', page)
 
     def test_truncated_success_response_is_scrubbed(self):
         response = Mock()
