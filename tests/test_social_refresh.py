@@ -83,10 +83,32 @@ class SocialTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0][1]['ids'], '1,2')
         self.assertEqual(calls[1][1]['max_results'], 10)
+        self.assertEqual(calls[1][1]['since_id'], '1')
         self.assertEqual(result['1']['comments'], [{'id': '3', 'source_url': 'https://x.com/i/status/3'}])
         self.assertNotIn('2', result)
         self.assertNotIn('DO NOT STORE', json.dumps(result))
         self.assertNotIn('private', json.dumps(result))
+
+    def test_x_search_rate_limit_and_duplicate_roots(self):
+        calls, waits = [], []
+        def fetch(url, params, headers):
+            calls.append((url, params))
+            if url.endswith('/search/all'):
+                if params['since_id'] == '1':
+                    raise s.APIError()
+                return {'data': []}
+            return {'data': [{'id': '1'}, {'id': '1'}, {'id': '2'}]}
+        result = s.x_posts(['1', '2'], 'private', True, NOW, fetch, pause=waits.append)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(waits, [1.1])
+        self.assertEqual(result['1']['comments_status'], 'unavailable')
+        self.assertEqual(result['2']['comments_status'], 'available')
+
+    def test_workflow_cannot_activate_paid_x(self):
+        workflow = (ROOT / '.github/workflows/pages.yml').read_text()
+        self.assertIn("X_ENABLED: 'false'", workflow)
+        self.assertNotIn('secrets.X_TOKEN', workflow)
+        self.assertNotIn('vars.X_ENABLED', workflow)
 
     def test_cache_expiry_future_allowlist_and_no_renewal(self):
         for age, expected in [(13, True), (14, False), (15, False), (-1, False)]:

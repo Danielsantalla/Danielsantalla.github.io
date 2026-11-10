@@ -7,6 +7,7 @@ import http.client
 import os
 from pathlib import Path
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -138,7 +139,7 @@ def youtube(ids, key, now, fetch=request_json, report=None):
     return result
 
 
-def x_posts(ids, token, enabled, now, fetch=request_json, report=None):
+def x_posts(ids, token, enabled, now, fetch=request_json, report=None, pause=time.sleep):
     if report is not None:
         report["x"] = "disabled (X_ENABLED is not true)" if not enabled else ("missing credential" if not token else "API request failed or invalid data")
     if not enabled or not token or not ids:
@@ -152,17 +153,23 @@ def x_posts(ids, token, enabled, now, fetch=request_json, report=None):
     if report is not None:
         report['x'] = 'API response received'
     result = {}
+    search_started = False
     for item in response.get('data', []):
         id = item.get('id')
-        if id not in ids:
+        if id not in ids or id in result:
             continue
         fields = ('like_count', 'reply_count', 'retweet_count', 'quote_count', 'impression_count')
         entry = {'updated_at': stamp(now), 'source_url': source('x', id),
                  'metrics': metrics(item.get('public_metrics', {}), {k: k for k in fields}),
                  'comments_status': 'unavailable', 'comments': []}
         try:
+            # Full-archive search permits at most one request per second.
+            # Wait after the prior response too, including failed responses.
+            if search_started:
+                pause(1.1)
+            search_started = True
             replies = fetch(base + '/search/all', {'query': 'conversation_id:' + id + ' is:reply -is:retweet',
-                            'max_results': 10, 'sort_order': 'recency'}, headers)
+                            'since_id': id, 'max_results': 10, 'sort_order': 'recency'}, headers)
             for reply in replies.get('data', [])[:10]:
                 rid = reply.get('id', '')
                 if isinstance(rid, str) and re.fullmatch(r'\d{1,25}', rid):

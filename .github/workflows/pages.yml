@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       refresh_social:
-        description: 'Refresh APIs (X only if X_ENABLED=true; paid reads may apply)'
+        description: 'Refresh YouTube API (paid X reads are disabled pending budget controls)'
         type: boolean
         default: false
 permissions:
@@ -40,8 +40,9 @@ jobs:
         if: github.event.schedule == '23 6 * * 1' || (github.event_name == 'workflow_dispatch' && inputs.refresh_social)
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          X_TOKEN: ${{ secrets.X_TOKEN }}
-          X_ENABLED: ${{ vars.X_ENABLED }}
+          # No X credential is supplied until a cumulative budget is approved
+          # and enforced. A repository variable alone cannot enable paid reads.
+          X_ENABLED: 'false'
         run: python scripts/social_refresh.py --refresh --output _site/data/social.json
       - uses: actions/upload-pages-artifact@v3
         with:
