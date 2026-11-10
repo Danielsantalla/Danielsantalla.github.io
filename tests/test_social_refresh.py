@@ -29,6 +29,21 @@ class SocialTests(unittest.TestCase):
             self.assertIn(f'<script src="/tweet-metrics.js?v={version}" defer></script>', path.read_text(),
                           f'{path.relative_to(ROOT)} must use the current script hash to avoid stale cached UI')
 
+    def test_requested_spam_reply_is_removed_without_affecting_other_comments(self):
+        spam_id = '1740367009349878038'
+        removals = json.loads((ROOT / 'data/x-removals.json').read_text())
+        self.assertIn(spam_id, removals['post_ids'])
+        entry = {'updated_at': s.stamp(NOW), 'metrics': {'reply_count': 35},
+                 'comments': [{'id': spam_id, 'author_id': '1736135198088323072'},
+                              {'id': '123', 'author_id': '456'}]}
+        entries = {'1211425334228336642': entry}
+        clean = s.remove_x_entries(entries, removals)
+        self.assertEqual(clean['1211425334228336642']['comments'], [{'id': '123', 'author_id': '456'}])
+        self.assertEqual(clean['1211425334228336642']['metrics'], entry['metrics'])
+        self.assertEqual(clean['1211425334228336642']['updated_at'], entry['updated_at'])
+        self.assertEqual(len(entry['comments']), 2, 'Do not mutate the input cache')
+        self.assertEqual(s.remove_x_entries(clean, removals), clean)
+
     def test_mapping(self):
         ids = s.ids_from_config(json.loads((ROOT / 'data/social-sources.json').read_text()))
         self.assertEqual(len(ids['youtube']), 7)

@@ -41,7 +41,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const snapshot={mode:'one_time',updated_at:old,metrics:{like_count:4,reply_count:null},comments:[xc]};
  r=await run({schema_version:1,x:{'12345':snapshot},youtube:{}});
  assert.equal(r.head.children.length,0);assert.equal(r.slot.querySelectorAll('.x-comment').length,1);
- assert.equal(r.slot.querySelectorAll('.load-embed').length,0);assert(r.slot.textContent.includes('not live'));assert(!r.slot.textContent.includes('refreshed weekly'));
+ assert.equal(r.slot.querySelectorAll('.load-embed').length,0);assert(!r.slot.textContent.includes('not live'));assert(r.slot.querySelector('.platform-metrics').children[0].title.includes('not live'));assert(!r.slot.textContent.includes('refreshed weekly'));
  assert.equal(r.slot.querySelector('.platform-panel').hidden,false);
  const xcomment=r.slot.querySelector('.x-comment');
  assert.equal(xcomment.querySelector('.sample-avatar').src,xc.author_image_url);assert.equal(xcomment.querySelector('.sample-avatar').referrerPolicy,'no-referrer');
@@ -91,11 +91,11 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
    const verified={...snapshot,metrics:{like_count:674,impression_count:76284},impressions_status:'owner_verified',impressions_source:{source_kind:'owner_analytics_screenshot',verified_on:'2026-11-10'}};
    r=await run({schema_version:1,x:{'12345':verified},youtube:{}},{list,yt:''});
    assert(r.slot.textContent.includes('76,284'));
-   const description=list?r.slot.querySelector('.summary-metric-views').title:r.slot.textContent;
+   const description=list?r.slot.querySelector('.summary-metric-views').title:r.slot.querySelector('.platform-metrics').children.map(n=>n.title).join(' ');
    assert(description.includes('impressions'));assert(description.includes("owner's X Analytics screenshot, verified Nov 10, 2026"));
-   if(list)assert(description.includes('not unique viewers'));else assert(description.includes('X views are post impressions, not video plays or unique viewers'));
+   if(list)assert(description.includes('not unique viewers'));else {assert(description.includes('X views (post impressions, not video plays or unique viewers)'));assert(!r.slot.textContent.includes("owner's X Analytics"));}
    r=await run({schema_version:1,x:{'12345':{...snapshot,metrics:{impression_count:55}}},youtube:{}},{list,yt:''});
-   assert(r.slot.textContent.includes('55'));assert((list?r.slot.querySelector('.summary-metric-views').title:r.slot.textContent).includes('impressions'));
+   assert(r.slot.textContent.includes('55'));assert((list?r.slot.querySelector('.summary-metric-views').title:r.slot.querySelector('.platform-metrics').children[0].title).includes('impressions'));
  }
  assert(!script.includes('innerHTML'));assert(!script.includes('widgets.js'));assert(!script.includes('createTweet'));
  r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:12}}},youtube:{abcdefghijk:yt}},{list:true});
@@ -103,9 +103,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  assert.equal(r.slot.querySelector('.summary-metric-views').querySelector('.metric-count').textContent,'20+');
  assert.equal(r.slot.querySelector('.summary-metric-likes').querySelector('.metric-count').textContent,'12');
  assert.equal(r.slot.querySelectorAll('.summary-metric-comments').length,0);
- assert.equal(r.slot.beforeNodes,undefined);assert.equal(r.slot.afterNodes[0].className,'social-legal');assert(r.slot.afterNodes[0].textContent.includes('YouTube terms'));
- assert(r.slot.afterNodes[0].textContent.includes('The eye combines YouTube views and X impressions, not unique viewers'));
- assert(r.slot.afterNodes[0].textContent.includes('A trailing + means some counts are unavailable'));
+ assert.equal(r.slot.beforeNodes,undefined);assert.equal(r.slot.afterNodes,undefined,'No disclosure or legend block below the tutorial list');
  r=await run({schema_version:1,x:{},youtube:{}},{list:true});assert.equal(r.slot.hidden,true);assert.equal(r.slot.attributes['aria-label'],undefined);
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:yt}},{list:true});
  assert.equal(r.slot.attributes['aria-label'],undefined);assert(!r.slot.textContent.includes('YouTube'));assert(r.slot.textContent.includes('20+'));
@@ -131,11 +129,11 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const wallsY={...completeY,metrics:{view_count:63965,like_count:1653,comment_count:72}};
  const pageX={...roundedX,impressions_source:{...roundedX.impressions_source,source_kind:'owner_analytics_page'}};
  r=await run({schema_version:1,x:{'12345':pageX},youtube:{}},{yt:''});
- assert(r.slot.textContent.includes('≈394,700'));assert(r.slot.textContent.includes("owner's X Analytics page, verified"));
+ assert(r.slot.textContent.includes('≈394,700'));assert(!r.slot.textContent.includes("owner's X Analytics page, verified"));assert(r.slot.querySelector('.platform-metrics').children.some(n=>n.title.includes("owner's X Analytics page, verified")));
  assert(!r.slot.textContent.includes('screenshot'));
  r=await run({schema_version:1,x:{'12345':roundedX},youtube:{abcdefghijk:wallsY}});
- assert(r.slot.textContent.includes('≈394,700'));assert(r.slot.textContent.includes('X displays “394,7 mil”, not an exact count'));
- assert(r.slot.querySelector('.platform-metrics').children.some(n=>n.attributes['aria-label']==='Approximately 394,700 X views (post impressions)'));
+ assert(r.slot.textContent.includes('≈394,700'));assert(!r.slot.textContent.includes('X displays “394,7 mil”, not an exact count'));assert(r.slot.querySelector('.platform-metrics').children.some(n=>n.title.includes('X displays “394,7 mil”, not an exact count')));
+ assert(r.slot.querySelector('.platform-metrics').children.some(n=>n.attributes['aria-label'].startsWith('Approximately 394,700 X views (post impressions, not video plays or unique viewers)')));
  assert(!r.slot.textContent.includes('87,912'));
  r=await run({schema_version:1,x:{'12345':roundedX},youtube:{abcdefghijk:wallsY}},{list:true});
  assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['≈458,700','5,733','107']);
@@ -144,7 +142,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  assert(roundedReach.title.includes('X post impressions: approximately 394,700'));
  assert(roundedReach.title.includes('YouTube video views: 63,965'));
  assert.equal(roundedReach.title,roundedReach.attributes['aria-label']);
- assert(r.slot.afterNodes[0].textContent.includes('≈ marks a rounded estimate'));
+ assert.equal(r.slot.afterNodes,undefined);
  for(const ytId of ['', 'abcdefghijk']){
    r=await run({schema_version:1,x:{'12345':roundedX},youtube:{}},{list:true,yt:ytId});
    assert.equal(r.slot.querySelector('.metric-count').textContent,'≈394,700'+(ytId?'+':''));
@@ -174,7 +172,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const listExpiry=r.timers.find(t=>t.ms>1 && t.ms<10000);assert(listExpiry);
  const listNow=Date.now();r.context.Date=class extends Date{static now(){return listNow+20000;}};listExpiry.fn();
  assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['76,284+','674+','13+']);
- assert.equal(r.slot.querySelectorAll('.summary-metric').length,3);assert.equal(r.slot.afterNodes.length,1);
+ assert.equal(r.slot.querySelectorAll('.summary-metric').length,3);assert.equal(r.slot.afterNodes,undefined);
  assert(r.slot.querySelector('.summary-metric-views').title.includes('YouTube video views unavailable'));
  r=await run({}, {fail:true,x:'',yt:''});assert(r.slot.textContent.includes('No social sources'));assert.equal(r.slot.querySelectorAll('.platform-tabs').length,0);
  r=await run({schema_version:1,x:{},youtube:{}},{yt:''});assert.equal(r.slot.querySelector('.platform-tabs').children.length,1);assert(!r.slot.textContent.includes('YouTube'));
@@ -186,7 +184,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  assert.equal(r.slot.querySelectorAll('.sample-comment').length,1);assert.equal(r.slot.querySelectorAll('.sample-avatar').length,1);assert(r.slot.textContent.includes('20'));assert(r.slot.textContent.includes('Privacy'));
  assert.equal(r.slot.querySelectorAll('.sample-avatar').filter(n=>n.tag==='img').length,0);
  assert.equal(r.slot.querySelectorAll('.youtube-consent').length,0);assert(!r.slot.textContent.includes('Agree and show YouTube'));
- assert.equal(r.slot.querySelectorAll('.social-legal').length,1);assert.equal(r.head.children.length,0);assert.deepEqual(r.requests,['/data/social.json']);
+ assert.equal(r.slot.querySelectorAll('.social-legal').length,1);assert(!r.slot.textContent.includes('Updated'));assert(!r.slot.textContent.includes('refreshed weekly'));assert(r.slot.querySelectorAll('.platform-metrics').some(n=>n.children.some(c=>c.title.includes('Updated'))));assert.equal(r.head.children.length,0);assert.deepEqual(r.requests,['/data/social.json']);
  // Reloads and multiple tab switches require no agreement and do not duplicate comments.
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:withAvatar}});
  const repeatedTabs=r.slot.querySelector('.platform-tabs').children;

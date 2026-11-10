@@ -24,13 +24,6 @@
     notice.append(link('/privacy/', 'Privacy'), link('https://www.youtube.com/t/terms', 'YouTube terms'));
     return notice;
   }
-  // Keep disclosure links outside tutorial links and away from the statistics.
-  const listing = slots.map(slot => slot.closest('.lesson-list')).find(Boolean);
-  if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) {
-    const notice = youtubeLegalLinks();
-    notice.append(element('span', 'metrics-legend', 'The eye combines YouTube views and X impressions, not unique viewers. A trailing + means some counts are unavailable. ≈ marks a rounded estimate.'));
-    listing.after(notice);
-  }
   const safeURL = (value, hosts, path) => {
     try {
       const url = new URL(value);
@@ -235,15 +228,14 @@
             const item = element('div');
             const approximate = platform === 'x' && key === 'impression_count' && impressionsRounding(entry);
             item.append(element('strong','',approximate ? impressionLabel(entry,entry.metrics[key]) : entry.metrics[key].toLocaleString('en-US')),element('span','',name));
-            if (approximate) item.setAttribute('aria-label',`Approximately ${entry.metrics[key].toLocaleString('en-US')} X views (post impressions)`);
+            const metricName = platform === 'x' && key === 'impression_count' ? 'X views (post impressions, not video plays or unique viewers)' : `${label} ${name}`;
+            const updated = platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live.` : `Updated ${dateLabel(entry.updated_at)} (UTC).`;
+            item.title = `${approximate ? 'Approximately ' : ''}${entry.metrics[key].toLocaleString('en-US')} ${metricName}. ${updated}`;
+            if (platform === 'x' && key === 'impression_count' && impressionsNote(entry)) item.title += ' ' + impressionsNote(entry);
+            item.setAttribute('aria-label', item.title);
             stats.append(item);
           }
           panel.append(stats);
-          if (platform === 'x' && available.some(([key]) => key === 'impression_count')) panel.append(element('p','sample-note','X views are post impressions, not video plays or unique viewers.'));
-        }
-        if (entry) {
-          const updated = element('time','sample-note',platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC) · refreshed weekly`); updated.dateTime = entry.updated_at; panel.append(updated);
-          if (platform === 'x' && impressionsNote(entry)) panel.append(element('p','sample-note',impressionsNote(entry)));
         }
         if (!ids[platform]) panel.append(element('p','sample-note',`No ${label} source linked for this tutorial.`));
         else if (!entry) panel.append(element('p','sample-note',`${label} statistics and comments are currently unavailable.`));
