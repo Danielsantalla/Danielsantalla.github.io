@@ -94,6 +94,8 @@
       slot.replaceChildren();
       if (isList) {
         slot.className = 'combined-metrics';
+        // Let assistive technology read each visible platform and its values.
+        slot.removeAttribute('aria-label');
         for (const platform of platforms) {
           const entry = get(platform), available = metrics(entry, platform);
           if (!available.length) continue;

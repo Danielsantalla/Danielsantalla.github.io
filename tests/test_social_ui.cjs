@@ -8,6 +8,7 @@ class Node {
  before(...ns){this.beforeNodes=[...(this.beforeNodes||[]),...ns];}
  replaceChildren(...ns){this._text='';this.children=ns;}
  setAttribute(k,v){this.attributes[k]=v;}
+ removeAttribute(k){delete this.attributes[k];}
  addEventListener(k,v){this.events[k]=v;}
  closest(){return this.list?this:null;}
  querySelectorAll(q){const result=[];const walk=n=>{for(const c of n.children){if(q[0]==='.' && (c.className||'').split(' ').includes(q.slice(1)))result.push(c);walk(c)}};walk(this);return result;}
@@ -18,6 +19,7 @@ class Node {
 const now=new Date().toISOString(), old=new Date(Date.now()-15*864e5).toISOString();
 async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false,consent=false}={}){
  const slot=new Node('div');slot.dataset={tweetMetrics:x,youtubeId:yt};slot.list=list;
+ slot.setAttribute('aria-label','Engagement on X');
  const head=new Node('head'),timers=[];
  const document={head,querySelectorAll:()=>[slot],createElement:t=>new Node(t)};
  let requests=[];
@@ -45,7 +47,8 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false,consen
  assert.equal(r.head.children.length,0);assert.equal(r.slot.querySelectorAll('.x-reply').length,1);
  const load=r.slot.querySelector('.load-embed');const pending=load.events.click();assert.equal(r.head.children.length,1);await load.events.click();assert.equal(r.head.children.length,1);r.head.children[0].onerror();await pending;assert(load.textContent.includes('could not load'));
  r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:12}}},youtube:{abcdefghijk:yt}},{list:true});assert.equal(r.slot.querySelectorAll('.platform-stat-line').length,1);assert.equal(r.slot.hidden,false);assert(!r.slot.textContent.includes('20 views'));r.agree();assert.equal(r.slot.querySelectorAll('.platform-stat-line').length,2);assert(r.slot.beforeNodes[0].hidden);
- r=await run({schema_version:1,x:{},youtube:{}},{list:true});assert.equal(r.slot.hidden,true);
+ r=await run({schema_version:1,x:{},youtube:{}},{list:true});assert.equal(r.slot.hidden,true);assert.equal(r.slot.attributes['aria-label'],undefined);
+ r=await run({schema_version:1,x:{},youtube:{abcdefghijk:yt}},{list:true,consent:true});assert.equal(r.slot.attributes['aria-label'],undefined);assert(r.slot.textContent.includes('YouTube'));assert(r.slot.textContent.includes('20 views'));
  r=await run({}, {fail:true,x:'',yt:''});assert(r.slot.textContent.includes('No social sources'));assert.equal(r.slot.querySelectorAll('.platform-tabs').length,0);
  r=await run({schema_version:1,x:{},youtube:{}},{yt:''});assert.equal(r.slot.querySelector('.platform-tabs').children.length,1);assert(!r.slot.textContent.includes('YouTube'));
  const single=r.slot.querySelector('.platform-tabs').children[0];for(const key of ['ArrowRight','ArrowLeft','Home','End'])single.events.keydown({key,preventDefault(){}});assert.equal(single.attributes['aria-selected'],'true');
