@@ -1,0 +1,63 @@
+name: Publish site and refresh social data
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 6 * * 1'
+    - cron: '23 6 * * 0,2-6'
+  workflow_dispatch:
+    inputs:
+      refresh_social:
+        description: 'Refresh YouTube API (paid X reads are disabled pending budget controls)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run offline regression tests
+        run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run social interface tests
+        run: node tests/test_social_ui.cjs
+      - name: Build public files only
+        run: python scripts/build_site.py _site
+      - name: Reuse unexpired published cache (no paid API requests)
+        if: github.event.schedule != '23 6 * * 1' && !(github.event_name == 'workflow_dispatch' && inputs.refresh_social)
+        run: python scripts/social_refresh.py --output _site/data/social.json
+      - name: Refresh social APIs
+        if: github.event.schedule == '23 6 * * 1' || (github.event_name == 'workflow_dispatch' && inputs.refresh_social)
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          # No X credential is supplied until a cumulative budget is approved
+          # and enforced. A repository variable alone cannot enable paid reads.
+          X_ENABLED: 'false'
+        run: python scripts/social_refresh.py --refresh --output _site/data/social.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          retention-days: 1
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

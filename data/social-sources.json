@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "tutorials": [
+    {
+      "path": "/tutorials/claymation-materials/",
+      "x_id": "1256781925890625543",
+      "youtube_id": "unzOrKpoBnA"
+    },
+    {
+      "path": "/tutorials/disappear-objects-near-to-the-camera/",
+      "x_id": "1213985659691655168"
+    },
+    {
+      "path": "/tutorials/easy-wind-for-flags/",
+      "x_id": "1252030003052765185",
+      "youtube_id": "ZFSCZQzURuo"
+    },
+    {
+      "path": "/tutorials/fast-lazy-uvs/",
+      "x_id": "1216178256120029184"
+    },
+    {
+      "path": "/tutorials/rounded-world-effect-from-animal-crossing/",
+      "x_id": "1243709133867499521",
+      "youtube_id": "YpURifSulsw"
+    },
+    {
+      "path": "/tutorials/see-through-walls/",
+      "x_id": "1211425334228336642",
+      "youtube_id": "0rEF8A3wF9U"
+    },
+    {
+      "path": "/tutorials/snow-in-shader-graph/",
+      "x_id": "1260695131755286528",
+      "youtube_id": "uIjWNu8bJN0"
+    },
+    {
+      "path": "/tutorials/timers-clocks/",
+      "x_id": "1254784538212876288",
+      "youtube_id": "sNMI-tU8PiI"
+    },
+    {
+      "path": "/tutorials/transparent-characters-without-coding/",
+      "x_id": "1212766169381441537",
+      "youtube_id": "uZcTWYDH5tY"
+    }
+  ]
+}
