@@ -34,20 +34,12 @@
 .platform-metrics strong{font-size:17px;font-weight:500;color:#444;font-variant-numeric:tabular-nums}
 .platform-metrics span{font-size:11px;color:#999}
 
-.lesson-list .combined-metrics:not([hidden]){display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin-top:9px;font-size:11px}
-.platform-stat-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;line-height:1.5}
-.platform-stat-line strong{font-size:10px;font-weight:500;min-width:48px;color:#777}
-.platform-stat-line span{white-space:nowrap;color:#999}
-@media(max-width:480px){.platform-stat-line{gap:9px;font-size:10px}.platform-stat-line strong{min-width:42px;font-size:10px}}
+.lesson-list .combined-metrics:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-top:0;font-size:11px;color:#767676}
 
 /* Quieter editorial rhythm: title + source statistics; details on demand. */
 .lesson-list>a{grid-template-columns:48px 1fr 10px;gap:16px;padding:17px 0}
 .lesson-list img{width:48px;height:48px;border-radius:2px}
 .lesson-list h2{margin:0 0 6px;font-size:13px}
-.lesson-list .combined-metrics:not([hidden]){gap:2px;margin-top:0}
-.platform-stat-line{gap:11px;font-size:10px}
-.platform-stat-line strong{font-weight:400;color:#666}
-.platform-stat-line span{color:#767676}
 .platform-conversation{margin-top:30px;padding-top:18px}
 .sample-comments .sample-note{margin-bottom:15px;font-size:10px}
 .platform-tabs{margin-bottom:16px;gap:22px}
@@ -64,7 +56,7 @@
 .sample-comments details{margin:16px 0 20px 34px}
 .sample-comments details .sample-comment{margin-left:-34px}
 .sample-comments summary,.conversation-source{font-size:11px}
-@media(max-width:480px){.lesson-list>a{grid-template-columns:40px 1fr 8px;gap:12px;padding:16px 0}.lesson-list img{width:40px;height:40px}.lesson-list h2{font-size:12px}.platform-stat-line{gap:8px}.platform-stat-line strong{min-width:43px}.sample-byline{gap:7px}.sample-byline span{flex-basis:auto}.platform-metrics{gap:17px}}
+@media(max-width:480px){.lesson-list>a{grid-template-columns:40px 1fr 8px;gap:12px;padding:16px 0}.lesson-list img{width:40px;height:40px}.lesson-list h2{font-size:12px}.lesson-list .combined-metrics:not([hidden]){column-gap:12px}.sample-byline{gap:7px}.sample-byline span{flex-basis:auto}.platform-metrics{gap:17px}}
 /* Remove the divider above the X / YouTube tabs. */
 .sample-comments.platform-conversation{border-top:0}
 
@@ -78,7 +70,7 @@
 .platform-panel>.conversation-source{display:inline-block;margin-top:10px}
 .sample-comment p{white-space:pre-wrap;overflow-wrap:anywhere}
 .sample-avatar{object-fit:cover}
-.x-panel-brand{font-size:28px;line-height:1;margin:4px 0 18px;color:#333}
+.platform-tabs .x-tab-logo{display:block;width:14px;height:14px}
 .x-comment>div{min-width:0}
 .x-comment .sample-avatar{width:24px;height:24px}
 .x-comment .sample-byline a{display:flex;gap:8px;flex-wrap:wrap;text-decoration:none}
@@ -89,3 +81,8 @@
 
 .social-legal{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 0;font-size:11px;color:#777}
 .social-legal a:focus-visible{outline:2px solid #777;outline-offset:4px}
+.metrics-legend{flex-basis:100%;font-size:10px;color:#767676;line-height:1.6}
+
+.summary-metric{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;line-height:1.5;font-variant-numeric:tabular-nums}
+.summary-metric .metric-icon{display:block;flex:none;width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.lesson-list>a>div{min-width:0}

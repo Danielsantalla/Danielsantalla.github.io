@@ -8,7 +8,7 @@ class Node {
  before(...ns){this.beforeNodes=[...(this.beforeNodes||[]),...ns];}
  after(...ns){this.afterNodes=[...(this.afterNodes||[]),...ns];}
  replaceChildren(...ns){this._text='';this.children=ns;}
- setAttribute(k,v){this.attributes[k]=v;}
+ setAttribute(k,v){this.attributes[k]=v;if(k==='class')this.className=v;}
  removeAttribute(k){delete this.attributes[k];}
  addEventListener(k,v){this.events[k]=v;}
  closest(){return this.list?this:null;}
@@ -22,7 +22,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const slot=new Node('div');slot.dataset={tweetMetrics:x,youtubeId:yt};slot.list=list;
  slot.setAttribute('aria-label','Engagement on X');
  const head=new Node('head'),timers=[];
- const document={head,querySelectorAll:()=>[slot],createElement:t=>new Node(t),createTextNode:text=>{const n=new Node('#text');n.textContent=text;return n;}};
+ const document={head,querySelectorAll:()=>[slot],createElement:t=>new Node(t),createElementNS:(_namespace,t)=>new Node(t),createTextNode:text=>{const n=new Node('#text');n.textContent=text;return n;}};
  let requests=[];
  const context={document,window:{},URL,AbortController,Date,Number,Promise,console,setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;},clearTimeout:()=>{},fetch:async(url)=>{requests.push(url);if(fail)throw Error('offline');return {ok:true,json:async()=>data}}};
  await vm.runInNewContext(script,context);
@@ -49,10 +49,14 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const textNode=xcomment.querySelector('.x-comment-text');
  assert.equal(textNode.children.map(n=>n.textContent).join(''),xc.text);
  const textLinks=textNode.children.filter(n=>n.tag==='a');assert.equal(textLinks.length,4);assert(textLinks.some(n=>n.href==='https://t.co/abc'));
- assert.equal(r.slot.querySelectorAll('.x-panel-brand').length,1);
+ assert.equal(r.slot.querySelectorAll('.x-panel-brand').length,0);
+ const brandLogo=r.slot.querySelector('.platform-tabs').querySelector('.x-tab-logo');
+ assert(brandLogo);assert.equal(brandLogo.alt,'X');assert.equal(brandLogo.width,14);assert.equal(brandLogo.height,14);
+ assert.equal(r.slot.querySelector('.platform-tabs').children[0].attributes['aria-label'],'X');
  assert(!r.timers.some(t=>t.ms>10000),'one-time snapshots have no expiry timer');
  const xTabs=r.slot.querySelector('.platform-tabs').children;for(let i=0;i<3;i++){xTabs[1].events.click();xTabs[0].events.click();}
  assert.equal(r.slot.querySelectorAll('.x-comment').length,1);
+ assert.equal(r.slot.querySelectorAll('.x-tab-logo').length,1);assert.equal(r.slot.querySelectorAll('.x-panel-brand').length,0);
  for(const changes of [{author:''},{author_id:''},{username:''},{author_image_url:'javascript:alert(1)'},{author_image_url:'https://pbs.twimg.com.evil.test/a'},{author_image_url:'https://user:pass@pbs.twimg.com/a'},{author_url:'https://evil.test/real_author'},{published_at:'bad'},{id:'bad'},{text:null}]){
    r=await run({schema_version:1,x:{'12345':{...snapshot,comments:[{...xc,...changes}]}},youtube:{}});
    assert.equal(r.slot.querySelectorAll('.x-comment').length,0);assert(r.slot.textContent.includes('4'));
@@ -77,11 +81,77 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  }
  r=await run({schema_version:1,x:{'12345':{...snapshot,mode:undefined}},youtube:{}});assert.equal(r.slot.querySelectorAll('.x-comment').length,0);
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:{...yt,mode:'one_time',updated_at:old}}});assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);
- r=await run({schema_version:1,x:{'12345':snapshot},youtube:{}},{list:true});assert(r.slot.querySelector('.platform-stat-line').title.includes('not live'));
+ r=await run({schema_version:1,x:{'12345':snapshot},youtube:{}},{list:true});assert(r.slot.querySelector('.summary-metric-likes').title.includes('not live'));
+ // Legacy API zeros do not mean zero reach. The list names unlike reach measures explicitly.
+ for(const list of [false,true]){
+   r=await run({schema_version:1,x:{'12345':{...snapshot,metrics:{like_count:0,impression_count:0}}},youtube:{}},{list,yt:''});
+   assert(!r.slot.textContent.includes('views'));assert(!r.slot.textContent.includes('impressions'));
+   if(list){assert.equal(r.slot.querySelectorAll('.summary-metric-views').length,0);assert.equal(r.slot.querySelector('.summary-metric-likes').textContent.trim(),'0');}
+   else assert(r.slot.textContent.includes('likes'));
+   const verified={...snapshot,metrics:{like_count:674,impression_count:76284},impressions_status:'owner_verified',impressions_source:{source_kind:'owner_analytics_screenshot',verified_on:'2026-11-10'}};
+   r=await run({schema_version:1,x:{'12345':verified},youtube:{}},{list,yt:''});
+   assert(r.slot.textContent.includes('76,284'));
+   const description=list?r.slot.querySelector('.summary-metric-views').title:r.slot.textContent;
+   assert(description.includes('impressions'));assert(description.includes("owner's X Analytics screenshot, verified Nov 10, 2026"));
+   if(list)assert(description.includes('not unique viewers'));else assert(!description.includes('views'));
+   r=await run({schema_version:1,x:{'12345':{...snapshot,metrics:{impression_count:55}}},youtube:{}},{list,yt:''});
+   assert(r.slot.textContent.includes('55'));assert((list?r.slot.querySelector('.summary-metric-views').title:r.slot.textContent).includes('impressions'));
+ }
  assert(!script.includes('innerHTML'));assert(!script.includes('widgets.js'));assert(!script.includes('createTweet'));
- r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:12}}},youtube:{abcdefghijk:yt}},{list:true});assert.equal(r.slot.querySelectorAll('.platform-stat-line').length,2);assert.equal(r.slot.hidden,false);assert(r.slot.textContent.includes('20 views'));assert.equal(r.slot.beforeNodes,undefined);assert.equal(r.slot.afterNodes[0].className,'social-legal');assert(r.slot.afterNodes[0].textContent.includes('YouTube terms'));
+ r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:12}}},youtube:{abcdefghijk:yt}},{list:true});
+ assert.equal(r.slot.querySelectorAll('.platform-stat-line').length,0);assert.equal(r.slot.hidden,false);
+ assert.equal(r.slot.querySelector('.summary-metric-views').querySelector('.metric-count').textContent,'20+');
+ assert.equal(r.slot.querySelector('.summary-metric-likes').querySelector('.metric-count').textContent,'12');
+ assert.equal(r.slot.querySelectorAll('.summary-metric-comments').length,0);
+ assert.equal(r.slot.beforeNodes,undefined);assert.equal(r.slot.afterNodes[0].className,'social-legal');assert(r.slot.afterNodes[0].textContent.includes('YouTube terms'));
+ assert(r.slot.afterNodes[0].textContent.includes('The eye combines YouTube views and X impressions, not unique viewers'));
+ assert(r.slot.afterNodes[0].textContent.includes('A trailing + means some counts are unavailable'));
  r=await run({schema_version:1,x:{},youtube:{}},{list:true});assert.equal(r.slot.hidden,true);assert.equal(r.slot.attributes['aria-label'],undefined);
- r=await run({schema_version:1,x:{},youtube:{abcdefghijk:yt}},{list:true});assert.equal(r.slot.attributes['aria-label'],undefined);assert(r.slot.textContent.includes('YouTube'));assert(r.slot.textContent.includes('20 views'));
+ r=await run({schema_version:1,x:{},youtube:{abcdefghijk:yt}},{list:true});
+ assert.equal(r.slot.attributes['aria-label'],undefined);assert(!r.slot.textContent.includes('YouTube'));assert(r.slot.textContent.includes('20+'));
+ assert(r.slot.querySelector('.summary-metric-views').attributes['aria-label'].includes('X post impressions unavailable'));
+ assert(r.slot.querySelector('.summary-metric-views').attributes['aria-label'].includes('YouTube video views'));
+ // Three compact, accessible icons sum only existing, valid metrics.
+ const completeX={...snapshot,metrics:{impression_count:76284,like_count:674,reply_count:13,retweet_count:50,quote_count:8},impressions_status:'owner_verified',impressions_source:{source_kind:'owner_analytics_screenshot',verified_on:'2026-11-10'}};
+ const completeY={...yt,metrics:{view_count:16998,like_count:691,comment_count:19}};
+ r=await run({schema_version:1,x:{'12345':completeX},youtube:{abcdefghijk:completeY}},{list:true});
+ assert.equal(r.slot.querySelectorAll('.summary-metric').length,3);
+ assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['93,282','1,365','32']);
+ assert(!/X|YouTube|reposts|quotes|views|likes|comments/.test(r.slot.textContent));
+ for(const metric of r.slot.querySelectorAll('.summary-metric')){
+   assert.equal(metric.attributes.role,'img');assert.equal(metric.title,metric.attributes['aria-label']);assert(!metric.title.includes('unavailable'));
+   assert.equal(metric.querySelector('.metric-count').attributes['aria-hidden'],'true');
+   const icon=metric.querySelector('.metric-icon');assert.equal(icon.tag,'svg');assert.equal(icon.attributes['aria-hidden'],'true');assert.equal(icon.attributes.focusable,'false');
+ }
+ const reach=r.slot.querySelector('.summary-metric-views');
+ assert(reach.title.includes('X post impressions and YouTube video views'));assert(reach.title.includes('not unique viewers'));assert(reach.title.includes('76,284'));assert(reach.title.includes('16,998'));
+ assert(reach.title.includes('Snapshot from'));assert(reach.title.includes('not live'));assert(reach.title.includes('Updated'));
+ // An unlinked platform is not missing data; genuine zero is not missing data.
+ for(const platform of ['x','youtube']){
+   const data={schema_version:1,x:{},youtube:{}};
+   data[platform][platform==='x'?'12345':'abcdefghijk']={updated_at:now,metrics:platform==='x'?{impression_count:0,like_count:0,reply_count:0}:{view_count:0,like_count:0,comment_count:0},impressions_status:'owner_verified'};
+   r=await run(data,{list:true,x:platform==='x'?'12345':'',yt:platform==='youtube'?'abcdefghijk':''});
+   assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['0','0','0']);
+   assert(!r.slot.querySelector('.summary-metric-views').title.includes('unavailable'));
+ }
+ // Malformed counts are omitted and marked partial, never coerced into zero.
+ for(const value of [null,undefined,'42',-1,1.5,Number.MAX_SAFE_INTEGER+1]){
+   r=await run({schema_version:1,x:{'12345':{...completeX,metrics:{impression_count:value,like_count:value,reply_count:value}}},youtube:{abcdefghijk:completeY}},{list:true});
+   assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['16,998+','691+','19+']);
+   assert(r.slot.querySelector('.summary-metric-views').title.includes('At least 16,998'));
+   assert(r.slot.querySelector('.summary-metric-views').title.includes('+ indicates an unavailable contribution, not zero'));
+ }
+ // A safe individual count can still produce an unsafe sum; do not display it.
+ r=await run({schema_version:1,x:{'12345':{...snapshot,metrics:{like_count:Number.MAX_SAFE_INTEGER}}},youtube:{abcdefghijk:{...yt,metrics:{like_count:1}}}},{list:true});
+ assert.equal(r.slot.hidden,true);
+ // Expiring data re-renders the list as partial without duplicating icons or legal links.
+ const nearListExpiry={...completeY,updated_at:new Date(Date.now()-14*864e5+5000).toISOString()};
+ r=await run({schema_version:1,x:{'12345':completeX},youtube:{abcdefghijk:nearListExpiry}},{list:true});
+ const listExpiry=r.timers.find(t=>t.ms>1 && t.ms<10000);assert(listExpiry);
+ const listNow=Date.now();r.context.Date=class extends Date{static now(){return listNow+20000;}};listExpiry.fn();
+ assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['76,284+','674+','13+']);
+ assert.equal(r.slot.querySelectorAll('.summary-metric').length,3);assert.equal(r.slot.afterNodes.length,1);
+ assert(r.slot.querySelector('.summary-metric-views').title.includes('YouTube video views unavailable'));
  r=await run({}, {fail:true,x:'',yt:''});assert(r.slot.textContent.includes('No social sources'));assert.equal(r.slot.querySelectorAll('.platform-tabs').length,0);
  r=await run({schema_version:1,x:{},youtube:{}},{yt:''});assert.equal(r.slot.querySelector('.platform-tabs').children.length,1);assert(!r.slot.textContent.includes('YouTube'));
  const single=r.slot.querySelector('.platform-tabs').children[0];for(const key of ['ArrowRight','ArrowLeft','Home','End'])single.events.keydown({key,preventDefault(){}});assert.equal(single.attributes['aria-selected'],'true');
@@ -105,5 +175,5 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const expiry=r.timers.find(t=>t.ms>1 && t.ms<10000);assert(expiry,'expiry timer must be scheduled');
  const actualNow=Date.now();r.context.Date=class extends Date{static now(){return actualNow+20000;}};expiry.fn();
  assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);assert(r.slot.textContent.includes('currently unavailable'));assert(r.slot.textContent.includes('YouTube terms'));
- console.log('PASS: unavailable, stale, zero-vs-missing, unsafe text/URLs, comments, tabs, custom X metadata/security/entities/one-time retention, direct YouTube statistics/comments/listing, no remote YouTube avatars, reload/repeat/expiry, no sources/offline');
+ console.log('PASS: unavailable, stale, zero-vs-missing, unsafe text/URLs, comments, tabs, custom X metadata/security/entities/one-time retention, direct YouTube statistics/comments/listing, compact three-icon sums with explicit reach measures/partial data/overflow/expiry, no remote YouTube avatars, reload/repeat/expiry, no sources/offline');
 })().catch(e=>{console.error(e);process.exitCode=1});

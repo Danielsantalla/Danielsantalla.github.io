@@ -26,7 +26,11 @@
   }
   // Keep disclosure links outside tutorial links and away from the statistics.
   const listing = slots.map(slot => slot.closest('.lesson-list')).find(Boolean);
-  if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) listing.after(youtubeLegalLinks());
+  if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) {
+    const notice = youtubeLegalLinks();
+    notice.append(element('span', 'metrics-legend', 'The eye combines YouTube views and X impressions, not unique viewers. A trailing + means some counts are unavailable.'));
+    listing.after(notice);
+  }
   const safeURL = (value, hosts, path) => {
     try {
       const url = new URL(value);
@@ -38,11 +42,32 @@
     return Number.isFinite(date) && date <= Date.now() && (platform === 'x' && entry.mode === 'one_time' || Date.now() - date < MAX_AGE);
   };
   const fields = {
-    x: [['like_count','likes'],['reply_count','replies'],['retweet_count','reposts'],['quote_count','quotes'],['impression_count','views']],
+    x: [['like_count','likes'],['reply_count','replies'],['retweet_count','reposts'],['quote_count','quotes'],['impression_count','impressions']],
     youtube: [['view_count','views'],['like_count','likes'],['comment_count','comments']]
   };
-  const metrics = (entry, platform) => fields[platform].filter(([key]) => Number.isSafeInteger(entry?.metrics?.[key]) && entry.metrics[key] >= 0);
+  const metrics = (entry, platform) => fields[platform].filter(([key]) => Number.isSafeInteger(entry?.metrics?.[key]) && entry.metrics[key] >= 0 &&
+    // Guard old cached snapshots too: these legacy API zeros are not verified.
+    !(platform === 'x' && key === 'impression_count' && entry.metrics[key] === 0 && entry.impressions_status !== 'owner_verified'));
+  const listMetrics = [
+    {kind:'views', keys:{x:'impression_count',youtube:'view_count'}, names:{x:'X post impressions',youtube:'YouTube video views'}, path:'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'},
+    {kind:'likes', keys:{x:'like_count',youtube:'like_count'}, names:{x:'X likes',youtube:'YouTube likes'}, path:'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z'},
+    {kind:'comments', keys:{x:'reply_count',youtube:'comment_count'}, names:{x:'X replies',youtube:'YouTube comments'}, path:'M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z'}
+  ];
+  function metricIcon(path) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('class','metric-icon'); svg.setAttribute('viewBox','0 0 24 24');
+    svg.setAttribute('width','14'); svg.setAttribute('height','14');
+    svg.setAttribute('aria-hidden','true'); svg.setAttribute('focusable','false');
+    const shape = document.createElementNS('http://www.w3.org/2000/svg','path'); shape.setAttribute('d',path);
+    svg.append(shape); return svg;
+  }
   const dateLabel = value => new Date(value).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:'UTC'});
+  const impressionsNote = entry => {
+    const evidence = entry?.impressions_source;
+    return entry?.impressions_status === 'owner_verified' && evidence?.source_kind === 'owner_analytics_screenshot' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(evidence.verified_on || '') && Number.isFinite(Date.parse(evidence.verified_on))
+      ? `Impressions from the owner's X Analytics screenshot, verified ${dateLabel(evidence.verified_on)}. Not live.` : '';
+  };
   const validX = c => c && xId(c.id) && xId(c.author_id) &&
     typeof c.author === 'string' && c.author.trim() && typeof c.text === 'string' && c.text.trim() &&
     typeof c.username === 'string' && /^[A-Za-z0-9_]{1,15}$/.test(c.username) &&
@@ -141,16 +166,32 @@
       slot.replaceChildren();
       if (isList) {
         slot.className = 'combined-metrics';
-        // Let assistive technology read each visible platform and its values.
         slot.removeAttribute('aria-label');
-        for (const platform of platforms) {
-          const entry = get(platform), available = metrics(entry, platform);
+        for (const metric of listMetrics) {
+          const values = platforms.map(platform => {
+            const entry = get(platform), key = metric.keys[platform];
+            const available = metrics(entry, platform).some(([field]) => field === key);
+            return {platform,entry,value:available ? entry.metrics[key] : null};
+          });
+          const available = values.filter(item => item.value !== null);
           if (!available.length) continue;
-          const row = element('span', 'platform-stat-line');
-          row.append(element('strong', '', platform === 'x' ? 'X' : 'YouTube'));
-          for (const [key,label] of available) row.append(element('span','',`${entry.metrics[key].toLocaleString('en-US')} ${label}`));
-          row.title = platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC)`;
-          slot.append(row);
+          const total = available.reduce((sum,item) => sum + item.value,0);
+          if (!Number.isSafeInteger(total)) continue;
+          const partial = available.length < values.length, formatted = total.toLocaleString('en-US');
+          const name = metric.kind === 'views' ? platforms.map(p => metric.names[p]).join(' and ') : metric.kind === 'comments' ? 'comments and replies' : 'likes';
+          const details = values.map(({platform,entry,value}) => {
+            if (value === null) return `${metric.names[platform]} unavailable`;
+            let detail = `${metric.names[platform]}: ${value.toLocaleString('en-US')}. `;
+            detail += platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC)`;
+            if (platform === 'x' && metric.kind === 'views' && impressionsNote(entry)) detail += '. ' + impressionsNote(entry);
+            return detail;
+          }).join('. ');
+          const label = `${partial ? 'At least ' : ''}${formatted} ${name}. ${metric.kind === 'views' ? 'Different platform measures, not unique viewers. ' : ''}${details}${partial ? '. + indicates an unavailable contribution, not zero.' : ''}`;
+          const item = element('span','summary-metric summary-metric-' + metric.kind);
+          item.setAttribute('role','img'); item.setAttribute('aria-label',label); item.title = label;
+          const count = element('span','metric-count',formatted + (partial ? '+' : ''));
+          count.setAttribute('aria-hidden','true');
+          item.append(metricIcon(metric.path),count); slot.append(item);
         }
         slot.hidden = !slot.childNodes.length;
         return;
@@ -166,16 +207,16 @@
       for (const platform of platforms) {
         const label = platform === 'x' ? 'X' : 'YouTube';
         const button = element('button','',label); button.type = 'button'; button.setAttribute('role','tab');
+        if (platform === 'x') {
+          button.textContent = ''; button.setAttribute('aria-label', 'X');
+          const logo = element('img', 'x-tab-logo'); logo.src = '/assets/x-logo.svg'; logo.alt = 'X'; logo.width = 14; logo.height = 14;
+          button.append(logo);
+        }
         const panel = element('div','platform-panel'); panel.setAttribute('role','tabpanel'); panel.tabIndex = 0;
         button.id = `social-${index}-${platform}-tab`; panel.id = `social-${index}-${platform}-panel`;
         button.setAttribute('aria-controls',panel.id); panel.setAttribute('aria-labelledby',button.id);
         tabs.append(button); buttons.push(button); panels.push(panel);
         const entry = get(platform), available = metrics(entry, platform);
-        if (platform === 'x') {
-          const brand = element('div', 'x-panel-brand');
-          const logo = element('img'); logo.src = '/assets/x-logo.svg'; logo.alt = 'X'; logo.width = 18; logo.height = 18;
-          brand.setAttribute('aria-label', 'X'); brand.append(logo); panel.append(brand);
-        }
         if (available.length) {
           const stats = element('div','platform-metrics');
           for (const [key,name] of available) {
@@ -185,6 +226,7 @@
         }
         if (entry) {
           const updated = element('time','sample-note',platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC) · refreshed weekly`); updated.dateTime = entry.updated_at; panel.append(updated);
+          if (platform === 'x' && impressionsNote(entry)) panel.append(element('p','sample-note',impressionsNote(entry)));
         }
         if (!ids[platform]) panel.append(element('p','sample-note',`No ${label} source linked for this tutorial.`));
         else if (!entry) panel.append(element('p','sample-note',`${label} statistics and comments are currently unavailable.`));

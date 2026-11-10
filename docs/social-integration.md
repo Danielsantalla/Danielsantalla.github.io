@@ -14,11 +14,19 @@ Run **Import X once and publish** manually on main with confirmation `x-import-2
 
 The budget reserves nine original posts and at most ten replies plus ten expanded author profiles per conversation. Maximum:99 posts × $0.005 +90 profiles × $0.010 = **$1.395 USD**. This fits the owner's $1.40 limit. A changed price or source map fails closed before spending. Requests are rate-spaced, with no pagination, retries, separate user lookups, unrelated expansions or other write operations. The first failed/uncertain paid request stops the remaining paid requests; reserved cost is never refunded in the guard. Provider deduplication is not assumed.
 
-Author expansions include only the profile ID, name, username and image required for attribution. Replies include text, publication date and display entities. Incomplete authors are omitted rather than invented. Imported data is rendered in the site's own layout, with linked avatar/name/username, unmodified text, linked date, source link and X branding. There are no embedded posts or X widget scripts. Profile images contact X's image servers, as disclosed in the privacy page.
+Author expansions include only the profile ID, name, username and image required for attribution. Replies include text, publication date and display entities. Incomplete authors are omitted rather than invented. Imported data is rendered in the site's own layout, with linked avatar/name/username, unmodified text, linked date, source link and X branding integrated into the discussion tab. There are no embedded posts or X widget scripts. Profile images contact X's image servers, as disclosed in the privacy page.
 
 The Actions summary records returned resources, estimated cost, optional observed credit difference and failures. It never prints account balances or secrets. Actual billing should be checked in the X console; a credit difference can include other concurrent activity or lag. An existing artifact can be deployed without repeating the API import if publication fails.
 
+The tutorial list combines available X post impressions and YouTube video views under the eye icon, with both measures named in accessible text/tooltips and a short visible note. It does not represent unique viewers. Likes sum like counts, and comments sum X replies plus YouTube comments. A trailing + marks a linked platform with missing data; unlinked sources do not count as missing. Individual tutorials retain platform-level figures.
+
 ## Snapshot retention and removal
+
+### Corrected impressions, not video views
+
+The November 10 import returned `impression_count: 0` for all nine legacy X posts. This is not reliable evidence of zero reach: the owner supplied an X Analytics screenshot for Claymation (post `1256781925890625543`) showing **76,284 impressions**, verified November 10, 2026. The same screenshot shows 12,767 video plays; these are different metrics. Post impressions must never be labelled video views.
+
+`data/x-metric-corrections.json` records only that owner-verified impression count, its source type, verification date and public post URL. The screenshot itself and unrelated private analytics are not published. Cache-only deployments apply this correction after removal rules and preserve the original import date, comments and other metrics. The interface labels it **impressions** and identifies the dated Analytics screenshot as its source, not the API. For other posts, unverified API-zero impressions are omitted rather than presented as zero reach. Positive API impressions and real zero likes/replies are unaffected. This correction performs no X API requests, changes no schedules and cannot resurrect removed posts.
 
 X is a dated one-time snapshot, not live data. It has **no arbitrary 14 day expiry** and is not renewed by scheduled YouTube refreshes. Source deployments reuse the original timestamp. No new comments are added automatically. API snapshots are not committed to public Git history; upload artifacts are retained for one day.
 

@@ -228,6 +228,42 @@ def remove_x_entries(entries, removals):
     return result
 
 
+def correct_x_impressions(entries, corrections):
+    """Do not equate unavailable legacy API impressions with zero reach.
+
+    Owner-supplied Analytics evidence is kept separate from API provenance.
+    Corrections never create posts or renew an imported snapshot's timestamp.
+    """
+    posts = corrections.get('posts', {}) if isinstance(corrections, dict) and corrections.get('schema_version') == 1 else {}
+    if not isinstance(posts, dict):
+        posts = {}
+    result = {}
+    for id, entry in entries.items():
+        clean = dict(entry)
+        clean['metrics'] = dict(entry.get('metrics', {}))
+        # The imported 2020 posts all returned zero, including one with 76,284
+        # impressions in the owner's Analytics. Zero is unverified, not reach.
+        if clean['metrics'].get('impression_count') == 0:
+            clean['metrics'].pop('impression_count')
+            clean['impressions_status'] = 'unavailable'
+        correction = posts.get(id)
+        if isinstance(correction, dict):
+            value = count(correction.get('impression_count'))
+            verified = correction.get('verified_on', '')
+            try:
+                valid_date = isinstance(verified, str) and datetime.strptime(verified, '%Y-%m-%d').strftime('%Y-%m-%d') == verified
+            except ValueError:
+                valid_date = False
+            if (value is not None and valid_date
+                    and correction.get('source_kind') == 'owner_analytics_screenshot'
+                    and correction.get('source_url') == source('x', id)):
+                clean['metrics']['impression_count'] = value
+                clean['impressions_status'] = 'owner_verified'
+                clean['impressions_source'] = {key: correction[key] for key in ('source_kind', 'verified_on', 'source_url')}
+        result[id] = clean
+    return result
+
+
 def fail_closed(operation, *args, **kwargs):
     try:
         return operation(*args, **kwargs)
@@ -278,6 +314,11 @@ def main():
         platforms['x'] = remove_x_entries(platforms['x'], removals)
     except (OSError, ValueError, TypeError):
         platforms['x'] = {}  # Malformed removal instructions must fail closed.
+    try:
+        corrections = json.loads((ROOT / 'data/x-metric-corrections.json').read_text())
+    except (OSError, ValueError, TypeError):
+        corrections = {}
+    platforms['x'] = correct_x_impressions(platforms['x'], corrections)
     payload = {'schema_version': 1, 'generated_at': stamp(now), 'refresh_interval_days': 7,
                'max_age_days': 14, **platforms}
     args.output.parent.mkdir(parents=True, exist_ok=True)

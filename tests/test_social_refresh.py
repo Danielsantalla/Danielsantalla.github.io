@@ -128,6 +128,65 @@ class SocialTests(unittest.TestCase):
             self.assertIsNone(s.count(bad))
         self.assertEqual(s.count('0'), 0)
 
+    def test_legacy_x_zero_impressions_are_unknown(self):
+        entry = {'mode': 'one_time', 'updated_at': s.stamp(NOW),
+                 'metrics': {'impression_count': 0, 'like_count': 0, 'reply_count': 6},
+                 'comments': [{'id': 'reply'}]}
+        result = s.correct_x_impressions({'1': entry}, {})['1']
+        self.assertNotIn('impression_count', result['metrics'])
+        self.assertEqual(result['impressions_status'], 'unavailable')
+        self.assertEqual(result['metrics']['like_count'], 0)
+        self.assertEqual(result['comments'], entry['comments'])
+        self.assertEqual(result['updated_at'], entry['updated_at'])
+        self.assertEqual(entry['metrics']['impression_count'], 0, 'Input snapshot must remain unchanged')
+
+    def test_owner_screenshot_impressions_keep_provenance_and_snapshot_date(self):
+        id = '1256781925890625543'
+        corrections = json.loads((ROOT / 'data/x-metric-corrections.json').read_text())
+        entry = {'mode': 'one_time', 'updated_at': '2026-11-09T12:00:00Z',
+                 'metrics': {'impression_count': 0, 'like_count': 674}, 'comments': []}
+        result = s.correct_x_impressions({id: entry}, corrections)[id]
+        self.assertEqual(result['metrics']['impression_count'], 76284)
+        self.assertEqual(result['impressions_status'], 'owner_verified')
+        self.assertEqual(result['impressions_source'], {
+            'source_kind': 'owner_analytics_screenshot', 'verified_on': '2026-11-10', 'source_url': s.source('x', id)})
+        self.assertEqual(result['updated_at'], entry['updated_at'])
+        self.assertEqual(result['metrics']['like_count'], 674)
+        self.assertEqual(s.correct_x_impressions({}, corrections), {}, 'Corrections must not restore removed posts')
+        self.assertEqual(s.correct_x_impressions({id: result}, corrections)[id], result, 'Repeated deployments must be stable')
+
+    def test_invalid_corrections_fail_closed_and_do_not_change_positive_api_counts(self):
+        entry = {'metrics': {'impression_count': 55}}
+        correct = {'impression_count': 99, 'source_kind': 'owner_analytics_screenshot',
+                   'verified_on': '2026-11-10', 'source_url': s.source('x', '1')}
+        for change in [{'impression_count': -1}, {'impression_count': True}, {'impression_count': 2.5},
+                       {'source_kind': 'invented'}, {'source_url': s.source('x', '2')},
+                       {'verified_on': '2026-02-30'}, {'verified_on': []}]:
+            result = s.correct_x_impressions({'1': entry}, {'schema_version': 1, 'posts': {'1': {**correct, **change}}})
+            self.assertEqual(result['1'], entry)
+        for corrections in [None, [], {}, {'schema_version': 1, 'posts': []}]:
+            self.assertEqual(s.correct_x_impressions({'1': entry}, corrections)['1'], entry)
+
+    def test_cache_only_deployment_applies_correction_without_api_reads(self):
+        id = '1256781925890625543'
+        entry = {'mode': 'one_time', 'updated_at': '2026-11-09T12:00:00Z',
+                 'source_url': s.source('x', id), 'metrics': {'impression_count': 0, 'like_count': 674},
+                 'comments': [{'id': '123', 'author_id': '456'}]}
+        cache = {'schema_version': 1, 'x': {id: entry}, 'youtube': {}}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'social.json'
+            with patch.object(s, 'request_json', return_value=cache) as request, \
+                    patch.object(s, 'youtube') as youtube, patch.object(s, 'x_posts') as x_posts, \
+                    patch('sys.argv', ['social_refresh.py', '--output', str(output)]), patch('sys.stdout', io.StringIO()):
+                s.main()
+            request.assert_called_once_with(s.CACHE_URL)
+            youtube.assert_not_called()
+            x_posts.assert_not_called()
+            result = json.loads(output.read_text())['x'][id]
+            self.assertEqual(result['metrics']['impression_count'], 76284)
+            self.assertEqual(result['updated_at'], entry['updated_at'])
+            self.assertEqual(result['comments'], entry['comments'])
+
     def test_malformed_api_data_is_purged(self):
         def malformed(*args):
             raise TypeError('upstream details')
@@ -236,7 +295,7 @@ class SocialTests(unittest.TestCase):
             b.build(output)
             self.assertTrue((output / 'index.html').is_file())
             self.assertTrue((output / 'data/social-sources.json').is_file())
-            for private in ['.git', '.github', 'scripts', 'tests', 'docs', 'README.md', 'data/tweet-metrics.json']:
+            for private in ['.git', '.github', 'scripts', 'tests', 'docs', 'README.md', 'data/tweet-metrics.json', 'data/x-metric-corrections.json']:
                 self.assertFalse((output / private).exists(), private)
 
 if __name__ == '__main__':
