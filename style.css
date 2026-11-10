@@ -71,3 +71,14 @@
 .tutorial-notes{margin:24px 0 18px;max-width:60ch}.tutorial-notes h2{font-size:13px;font-weight:500;color:#444;margin:0 0 7px}.tutorial-notes p{font-size:13px;line-height:1.7;color:#707070;margin:0}.archive p a{text-decoration:underline;text-underline-offset:3px}
 
 .tutorial-notes .tutorial-date{font-size:11px;color:#8b8b8b;margin-top:10px}
+
+/* Live source snapshots retain the quiet tutorial layout. */
+.platform-panel[hidden]{display:none}
+.platform-panel>.sample-note{display:block;line-height:1.6;color:#777}
+.platform-panel>.conversation-source{display:inline-block;margin-top:10px}
+.sample-comment p{white-space:pre-wrap;overflow-wrap:anywhere}
+.sample-avatar{object-fit:cover}
+.x-reply{margin:16px 0;max-width:100%;overflow-wrap:anywhere}
+.x-embed{max-width:100%}
+.platform-conversation .load-embed{font-size:11px}
+.platform-conversation button:focus-visible,.platform-conversation a:focus-visible,.platform-conversation summary:focus-visible{outline:2px solid #777;outline-offset:4px}
