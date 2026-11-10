@@ -52,6 +52,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false,consen
  r=await run({schema_version:1,x:{},youtube:{}},{x:''});assert.equal(r.slot.querySelector('.platform-tabs').children.length,1);assert.equal(r.slot.querySelector('.platform-tabs').children[0].textContent,'YouTube');
  const withAvatar={...yt,comments:[{...yt.comments[0],author_image_url:'https://yt3.ggpht.com/avatar'}]};
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:withAvatar}});
+ assert.equal(r.slot.querySelector('.platform-tabs').children.find(n=>n.textContent==='YouTube').attributes['aria-selected'],'true');
  assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);assert.equal(r.slot.querySelectorAll('.sample-avatar').length,0);assert(!r.slot.textContent.includes('20 views'));assert(r.slot.textContent.includes('Privacy and YouTube terms'));
  const consentButton=r.slot.querySelector('.youtube-consent').querySelector('.load-embed');r.agree();assert.equal(r.slot.querySelectorAll('.sample-comment').length,1);assert.equal(r.slot.querySelectorAll('.sample-avatar').filter(n=>n.tag==='img').length,1);consentButton.events.click();assert.equal(r.slot.querySelectorAll('.sample-comment').length,1);
  assert(r.slot.querySelector('.platform-tabs').children.find(n=>n.textContent==='YouTube').focused);

@@ -205,9 +205,11 @@
         });
       });
       slot.append(tabs,...panels);
-      const firstFresh = platforms.findIndex(platform => get(platform));
+      // Prefer a platform with fresh data without bypassing its consent gate.
+      const firstFresh = platforms.findIndex(platform => fresh(cache[platform]?.[ids[platform]]));
       const previous = platforms.indexOf(selectedPlatform);
-      select(previous >= 0 ? previous : (firstFresh < 0 ? 0 : firstFresh), focus && selectedPlatform === 'youtube');
+      const fallback = Math.max(0, platforms.indexOf('youtube'));
+      select(previous >= 0 ? previous : (firstFresh < 0 ? fallback : firstFresh), focus && selectedPlatform === 'youtube');
     }
     renderers.push(render);
     render();
