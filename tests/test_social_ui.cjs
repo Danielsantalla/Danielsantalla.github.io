@@ -93,7 +93,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
    assert(r.slot.textContent.includes('76,284'));
    const description=list?r.slot.querySelector('.summary-metric-views').title:r.slot.textContent;
    assert(description.includes('impressions'));assert(description.includes("owner's X Analytics screenshot, verified Nov 10, 2026"));
-   if(list)assert(description.includes('not unique viewers'));else assert(!description.includes('views'));
+   if(list)assert(description.includes('not unique viewers'));else assert(description.includes('X views are post impressions, not video plays or unique viewers'));
    r=await run({schema_version:1,x:{'12345':{...snapshot,metrics:{impression_count:55}}},youtube:{}},{list,yt:''});
    assert(r.slot.textContent.includes('55'));assert((list?r.slot.querySelector('.summary-metric-views').title:r.slot.textContent).includes('impressions'));
  }
@@ -126,6 +126,30 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const reach=r.slot.querySelector('.summary-metric-views');
  assert(reach.title.includes('X post impressions and YouTube video views'));assert(reach.title.includes('not unique viewers'));assert(reach.title.includes('76,284'));assert(reach.title.includes('16,998'));
  assert(reach.title.includes('Snapshot from'));assert(reach.title.includes('not live'));assert(reach.title.includes('Updated'));
+ // Owner Analytics uses an abbreviated count: preserve uncertainty everywhere.
+ const roundedX={...completeX,metrics:{impression_count:394700,like_count:4080,reply_count:35},impressions_source:{...completeX.impressions_source,precision:'rounded',rounding_increment:100,source_display:'394,7 mil'}};
+ const wallsY={...completeY,metrics:{view_count:63965,like_count:1653,comment_count:72}};
+ const pageX={...roundedX,impressions_source:{...roundedX.impressions_source,source_kind:'owner_analytics_page'}};
+ r=await run({schema_version:1,x:{'12345':pageX},youtube:{}},{yt:''});
+ assert(r.slot.textContent.includes('≈394,700'));assert(r.slot.textContent.includes("owner's X Analytics page, verified"));
+ assert(!r.slot.textContent.includes('screenshot'));
+ r=await run({schema_version:1,x:{'12345':roundedX},youtube:{abcdefghijk:wallsY}});
+ assert(r.slot.textContent.includes('≈394,700'));assert(r.slot.textContent.includes('X displays “394,7 mil”, not an exact count'));
+ assert(r.slot.querySelector('.platform-metrics').children.some(n=>n.attributes['aria-label']==='Approximately 394,700 X views (post impressions)'));
+ assert(!r.slot.textContent.includes('87,912'));
+ r=await run({schema_version:1,x:{'12345':roundedX},youtube:{abcdefghijk:wallsY}},{list:true});
+ assert.deepEqual(r.slot.querySelectorAll('.metric-count').map(n=>n.textContent),['≈458,700','5,733','107']);
+ const roundedReach=r.slot.querySelector('.summary-metric-views');
+ assert(roundedReach.title.startsWith('Approximately 458,700'));
+ assert(roundedReach.title.includes('X post impressions: approximately 394,700'));
+ assert(roundedReach.title.includes('YouTube video views: 63,965'));
+ assert.equal(roundedReach.title,roundedReach.attributes['aria-label']);
+ assert(r.slot.afterNodes[0].textContent.includes('≈ marks a rounded estimate'));
+ for(const ytId of ['', 'abcdefghijk']){
+   r=await run({schema_version:1,x:{'12345':roundedX},youtube:{}},{list:true,yt:ytId});
+   assert.equal(r.slot.querySelector('.metric-count').textContent,'≈394,700'+(ytId?'+':''));
+   assert(r.slot.querySelector('.summary-metric-views').title.startsWith('Approximately '+(ytId?'at least ':'')+'394,700'));
+ }
  // An unlinked platform is not missing data; genuine zero is not missing data.
  for(const platform of ['x','youtube']){
    const data={schema_version:1,x:{},youtube:{}};

@@ -142,7 +142,8 @@ class SocialTests(unittest.TestCase):
 
     def test_owner_screenshot_impressions_keep_provenance_and_snapshot_date(self):
         id = '1256781925890625543'
-        corrections = json.loads((ROOT / 'data/x-metric-corrections.json').read_text())
+        corrections = {'schema_version': 1, 'posts': {id: {'impression_count': 76284,
+            'source_kind': 'owner_analytics_screenshot', 'verified_on': '2026-11-10', 'source_url': s.source('x', id)}}}
         entry = {'mode': 'one_time', 'updated_at': '2026-11-09T12:00:00Z',
                  'metrics': {'impression_count': 0, 'like_count': 674}, 'comments': []}
         result = s.correct_x_impressions({id: entry}, corrections)[id]
@@ -154,6 +155,82 @@ class SocialTests(unittest.TestCase):
         self.assertEqual(result['metrics']['like_count'], 674)
         self.assertEqual(s.correct_x_impressions({}, corrections), {}, 'Corrections must not restore removed posts')
         self.assertEqual(s.correct_x_impressions({id: result}, corrections)[id], result, 'Repeated deployments must be stable')
+
+    def test_rounded_owner_screenshot_keeps_precision_without_inventing_exact_count(self):
+        id = '1211425334228336642'
+        corrections = json.loads((ROOT / 'data/x-metric-corrections.json').read_text())
+        corrections['posts'][id]['source_kind'] = 'owner_analytics_screenshot'
+        entry = {'mode': 'one_time', 'updated_at': '2026-11-09T12:00:00Z',
+                 'metrics': {'impression_count': 0, 'like_count': 4080, 'reply_count': 35},
+                 'comments': [{'id': 'reply'}]}
+        result = s.correct_x_impressions({id: entry}, corrections)[id]
+        self.assertEqual(result['metrics']['impression_count'], 394700)
+        self.assertEqual(result['impressions_source'], {
+            'source_kind': 'owner_analytics_screenshot', 'verified_on': '2026-11-10',
+            'source_url': s.source('x', id), 'precision': 'rounded',
+            'rounding_increment': 100, 'source_display': '394,7 mil'})
+        self.assertEqual(result['comments'], entry['comments'])
+        self.assertEqual(result['updated_at'], entry['updated_at'])
+        self.assertEqual(result['metrics']['like_count'], 4080)
+        self.assertEqual(result['metrics']['reply_count'], 35)
+        self.assertNotIn('video_view_count', result['metrics'])
+        self.assertEqual(s.correct_x_impressions({id: result}, corrections)[id], result)
+        self.assertEqual(s.correct_x_impressions({}, corrections), {})
+        for change in [{'precision': 'invented'}, {'rounding_increment': True},
+                       {'rounding_increment': 0}, {'rounding_increment': 99},
+                       {'impression_count': 394701}, {'source_display': None},
+                       {'source_display': 'bad\nsource'}, {'source_display': ''}]:
+            with self.subTest(change=change):
+                invalid = {'schema_version': 1, 'posts': {id: {**corrections['posts'][id], **change}}}
+                rejected = s.correct_x_impressions({id: entry}, invalid)[id]
+                self.assertNotIn('impression_count', rejected['metrics'])
+                self.assertNotIn('impressions_source', rejected)
+
+    def test_all_nine_verified_analytics_observations_match_sources(self):
+        corrections = json.loads((ROOT / 'data/x-metric-corrections.json').read_text())['posts']
+        expected = {
+            '1256781925890625543': (76286, None), '1213985659691655168': (137000, 1000),
+            '1252030003052765185': (60032, None), '1216178256120029184': (199400, 100),
+            '1243709133867499521': (254700, 100), '1211425334228336642': (394700, 100),
+            '1260695131755286528': (39581, None), '1254784538212876288': (57230, None),
+            '1212766169381441537': (226400, 100)}
+        self.assertEqual(set(corrections), set(expected))
+        for id, (value, increment) in expected.items():
+            self.assertEqual(corrections[id]['impression_count'], value)
+            self.assertEqual(corrections[id]['source_kind'], 'owner_analytics_page')
+            self.assertEqual(corrections[id]['source_url'], s.source('x', id))
+            self.assertEqual(corrections[id].get('rounding_increment'), increment)
+            self.assertEqual(corrections[id].get('precision'), 'rounded' if increment else None)
+
+    def test_direct_owner_analytics_page_has_distinct_provenance(self):
+        id = '1211425334228336642'
+        correction = {'impression_count': 394700, 'source_kind': 'owner_analytics_page',
+                      'verified_on': '2026-11-10', 'source_url': s.source('x', id)}
+        result = s.correct_x_impressions({id: {'metrics': {}}}, {'schema_version': 1, 'posts': {id: correction}})[id]
+        self.assertEqual(result['metrics']['impression_count'], 394700)
+        self.assertEqual(result['impressions_source']['source_kind'], 'owner_analytics_page')
+
+    def test_rounded_correction_deploy_uses_cache_without_paid_requests(self):
+        id = '1211425334228336642'
+        entry = {'mode': 'one_time', 'updated_at': '2026-11-09T12:00:00Z',
+                 'source_url': s.source('x', id), 'metrics': {'like_count': 4080},
+                 'comments': [{'id': '123', 'author_id': '456'}]}
+        cache = {'schema_version': 1, 'x': {id: entry}, 'youtube': {}}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'social.json'
+            with patch.object(s, 'request_json', return_value=cache) as request, \
+                    patch.object(s, 'youtube') as youtube, patch.object(s, 'x_posts') as x_posts, \
+                    patch('sys.argv', ['social_refresh.py', '--output', str(output)]), patch('sys.stdout', io.StringIO()):
+                s.main()
+            request.assert_called_once_with(s.CACHE_URL)
+            youtube.assert_not_called()
+            x_posts.assert_not_called()
+            result = json.loads(output.read_text())['x'][id]
+            self.assertEqual(result['metrics']['impression_count'], 394700)
+            self.assertEqual(result['impressions_source']['precision'], 'rounded')
+            self.assertEqual(result['impressions_source']['source_display'], '394,7 mil')
+            self.assertEqual(result['updated_at'], entry['updated_at'])
+            self.assertEqual(result['comments'], entry['comments'])
 
     def test_invalid_corrections_fail_closed_and_do_not_change_positive_api_counts(self):
         entry = {'metrics': {'impression_count': 55}}
@@ -183,7 +260,7 @@ class SocialTests(unittest.TestCase):
             youtube.assert_not_called()
             x_posts.assert_not_called()
             result = json.loads(output.read_text())['x'][id]
-            self.assertEqual(result['metrics']['impression_count'], 76284)
+            self.assertEqual(result['metrics']['impression_count'], 76286)
             self.assertEqual(result['updated_at'], entry['updated_at'])
             self.assertEqual(result['comments'], entry['comments'])
 

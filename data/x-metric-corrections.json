@@ -2,10 +2,73 @@
   "schema_version": 1,
   "posts": {
     "1256781925890625543": {
-      "impression_count": 76284,
-      "source_kind": "owner_analytics_screenshot",
+      "impression_count": 76286,
+      "source_kind": "owner_analytics_page",
       "verified_on": "2026-11-10",
       "source_url": "https://x.com/i/status/1256781925890625543"
+    },
+    "1213985659691655168": {
+      "impression_count": 137000,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1213985659691655168",
+      "precision": "rounded",
+      "rounding_increment": 1000,
+      "source_display": "137 mil"
+    },
+    "1252030003052765185": {
+      "impression_count": 60032,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1252030003052765185"
+    },
+    "1216178256120029184": {
+      "impression_count": 199400,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1216178256120029184",
+      "precision": "rounded",
+      "rounding_increment": 100,
+      "source_display": "199,4 mil"
+    },
+    "1243709133867499521": {
+      "impression_count": 254700,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1243709133867499521",
+      "precision": "rounded",
+      "rounding_increment": 100,
+      "source_display": "254,7 mil"
+    },
+    "1211425334228336642": {
+      "impression_count": 394700,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1211425334228336642",
+      "precision": "rounded",
+      "rounding_increment": 100,
+      "source_display": "394,7 mil"
+    },
+    "1260695131755286528": {
+      "impression_count": 39581,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1260695131755286528"
+    },
+    "1254784538212876288": {
+      "impression_count": 57230,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1254784538212876288"
+    },
+    "1212766169381441537": {
+      "impression_count": 226400,
+      "source_kind": "owner_analytics_page",
+      "verified_on": "2026-11-10",
+      "source_url": "https://x.com/i/status/1212766169381441537",
+      "precision": "rounded",
+      "rounding_increment": 100,
+      "source_display": "226,4 mil"
     }
   }
 }

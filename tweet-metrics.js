@@ -28,7 +28,7 @@
   const listing = slots.map(slot => slot.closest('.lesson-list')).find(Boolean);
   if (listing && slots.some(slot => ytId(slot.dataset.youtubeId))) {
     const notice = youtubeLegalLinks();
-    notice.append(element('span', 'metrics-legend', 'The eye combines YouTube views and X impressions, not unique viewers. A trailing + means some counts are unavailable.'));
+    notice.append(element('span', 'metrics-legend', 'The eye combines YouTube views and X impressions, not unique viewers. A trailing + means some counts are unavailable. ≈ marks a rounded estimate.'));
     listing.after(notice);
   }
   const safeURL = (value, hosts, path) => {
@@ -42,7 +42,7 @@
     return Number.isFinite(date) && date <= Date.now() && (platform === 'x' && entry.mode === 'one_time' || Date.now() - date < MAX_AGE);
   };
   const fields = {
-    x: [['like_count','likes'],['reply_count','replies'],['retweet_count','reposts'],['quote_count','quotes'],['impression_count','impressions']],
+    x: [['like_count','likes'],['reply_count','replies'],['retweet_count','reposts'],['quote_count','quotes'],['impression_count','views']],
     youtube: [['view_count','views'],['like_count','likes'],['comment_count','comments']]
   };
   const metrics = (entry, platform) => fields[platform].filter(([key]) => Number.isSafeInteger(entry?.metrics?.[key]) && entry.metrics[key] >= 0 &&
@@ -62,11 +62,18 @@
     svg.append(shape); return svg;
   }
   const dateLabel = value => new Date(value).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:'UTC'});
+  const impressionsRounding = entry => {
+    const evidence = entry?.impressions_source, increment = evidence?.rounding_increment;
+    return entry?.impressions_status === 'owner_verified' && ['owner_analytics_screenshot','owner_analytics_page'].includes(evidence?.source_kind) &&
+      evidence.precision === 'rounded' && [10,100,1000,10000,100000,1000000].includes(increment) ? increment : 0;
+  };
+  const impressionLabel = (entry, value) => (impressionsRounding(entry) ? '≈' : '') + value.toLocaleString('en-US');
   const impressionsNote = entry => {
     const evidence = entry?.impressions_source;
-    return entry?.impressions_status === 'owner_verified' && evidence?.source_kind === 'owner_analytics_screenshot' &&
+    return entry?.impressions_status === 'owner_verified' && ['owner_analytics_screenshot','owner_analytics_page'].includes(evidence?.source_kind) &&
       /^\d{4}-\d{2}-\d{2}$/.test(evidence.verified_on || '') && Number.isFinite(Date.parse(evidence.verified_on))
-      ? `Impressions from the owner's X Analytics screenshot, verified ${dateLabel(evidence.verified_on)}. Not live.` : '';
+      ? `Impressions from the owner's X Analytics${evidence.source_kind === 'owner_analytics_screenshot' ? ' screenshot' : ' page'}, verified ${dateLabel(evidence.verified_on)}. Not live.` +
+        (impressionsRounding(entry) ? ` Approximate: X displays “${evidence.source_display}”, not an exact count.` : '') : '';
   };
   const validX = c => c && xId(c.id) && xId(c.author_id) &&
     typeof c.author === 'string' && c.author.trim() && typeof c.text === 'string' && c.text.trim() &&
@@ -177,16 +184,21 @@
           if (!available.length) continue;
           const total = available.reduce((sum,item) => sum + item.value,0);
           if (!Number.isSafeInteger(total)) continue;
-          const partial = available.length < values.length, formatted = total.toLocaleString('en-US');
+          const partial = available.length < values.length;
+          const rounding = metric.kind === 'views' ? Math.max(0,...available.map(({platform,entry}) => platform === 'x' ? impressionsRounding(entry) : 0)) : 0;
+          const displayedTotal = rounding ? Math.round(total / rounding) * rounding : total;
+          if (!Number.isSafeInteger(displayedTotal)) continue;
+          const formatted = (rounding ? '≈' : '') + displayedTotal.toLocaleString('en-US');
           const name = metric.kind === 'views' ? platforms.map(p => metric.names[p]).join(' and ') : metric.kind === 'comments' ? 'comments and replies' : 'likes';
           const details = values.map(({platform,entry,value}) => {
             if (value === null) return `${metric.names[platform]} unavailable`;
-            let detail = `${metric.names[platform]}: ${value.toLocaleString('en-US')}. `;
+            const approximate = platform === 'x' && metric.kind === 'views' && impressionsRounding(entry);
+            let detail = `${metric.names[platform]}: ${approximate ? 'approximately ' : ''}${value.toLocaleString('en-US')}. `;
             detail += platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC)`;
             if (platform === 'x' && metric.kind === 'views' && impressionsNote(entry)) detail += '. ' + impressionsNote(entry);
             return detail;
           }).join('. ');
-          const label = `${partial ? 'At least ' : ''}${formatted} ${name}. ${metric.kind === 'views' ? 'Different platform measures, not unique viewers. ' : ''}${details}${partial ? '. + indicates an unavailable contribution, not zero.' : ''}`;
+          const label = `${rounding ? 'Approximately ' : ''}${partial ? (rounding ? 'at least ' : 'At least ') : ''}${displayedTotal.toLocaleString('en-US')} ${name}. ${metric.kind === 'views' ? 'Different platform measures, not unique viewers. ' : ''}${details}${partial ? '. + indicates an unavailable contribution, not zero.' : ''}`;
           const item = element('span','summary-metric summary-metric-' + metric.kind);
           item.setAttribute('role','img'); item.setAttribute('aria-label',label); item.title = label;
           const count = element('span','metric-count',formatted + (partial ? '+' : ''));
@@ -220,9 +232,14 @@
         if (available.length) {
           const stats = element('div','platform-metrics');
           for (const [key,name] of available) {
-            const item = element('div'); item.append(element('strong','',entry.metrics[key].toLocaleString('en-US')),element('span','',name)); stats.append(item);
+            const item = element('div');
+            const approximate = platform === 'x' && key === 'impression_count' && impressionsRounding(entry);
+            item.append(element('strong','',approximate ? impressionLabel(entry,entry.metrics[key]) : entry.metrics[key].toLocaleString('en-US')),element('span','',name));
+            if (approximate) item.setAttribute('aria-label',`Approximately ${entry.metrics[key].toLocaleString('en-US')} X views (post impressions)`);
+            stats.append(item);
           }
           panel.append(stats);
+          if (platform === 'x' && available.some(([key]) => key === 'impression_count')) panel.append(element('p','sample-note','X views are post impressions, not video plays or unique viewers.'));
         }
         if (entry) {
           const updated = element('time','sample-note',platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC) · refreshed weekly`); updated.dateTime = entry.updated_at; panel.append(updated);

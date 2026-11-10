@@ -241,7 +241,7 @@ def correct_x_impressions(entries, corrections):
     for id, entry in entries.items():
         clean = dict(entry)
         clean['metrics'] = dict(entry.get('metrics', {}))
-        # The imported 2020 posts all returned zero, including one with 76,284
+        # The imported 2019–2020 posts all returned zero, including one with 76,284
         # impressions in the owner's Analytics. Zero is unverified, not reach.
         if clean['metrics'].get('impression_count') == 0:
             clean['metrics'].pop('impression_count')
@@ -254,12 +254,24 @@ def correct_x_impressions(entries, corrections):
                 valid_date = isinstance(verified, str) and datetime.strptime(verified, '%Y-%m-%d').strftime('%Y-%m-%d') == verified
             except ValueError:
                 valid_date = False
-            if (value is not None and valid_date
-                    and correction.get('source_kind') == 'owner_analytics_screenshot'
+            precision = correction.get('precision', 'exact')
+            increment = correction.get('rounding_increment')
+            display = correction.get('source_display')
+            valid_precision = precision == 'exact' or (
+                precision == 'rounded' and type(increment) is int
+                and increment in (10, 100, 1000, 10000, 100000, 1000000)
+                and value is not None and value % increment == 0
+                and isinstance(display, str) and 0 < len(display) <= 60
+                and not any(ord(char) < 32 for char in display))
+            if (value is not None and valid_date and valid_precision
+                    and correction.get('source_kind') in ('owner_analytics_screenshot', 'owner_analytics_page')
                     and correction.get('source_url') == source('x', id)):
                 clean['metrics']['impression_count'] = value
                 clean['impressions_status'] = 'owner_verified'
                 clean['impressions_source'] = {key: correction[key] for key in ('source_kind', 'verified_on', 'source_url')}
+                if precision == 'rounded':
+                    clean['impressions_source'].update({
+                        'precision': precision, 'rounding_increment': increment, 'source_display': display})
         result[id] = clean
     return result
 
