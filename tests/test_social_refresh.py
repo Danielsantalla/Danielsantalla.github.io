@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -20,6 +21,14 @@ b = load('build_site')
 NOW = datetime(2026, 11, 10, tzinfo=timezone.utc)
 
 class SocialTests(unittest.TestCase):
+    def test_tutorials_load_current_social_script_version(self):
+        version = hashlib.sha256((ROOT / 'tweet-metrics.js').read_bytes()).hexdigest()[:12]
+        paths = list((ROOT / 'tutorials').rglob('index.html'))
+        self.assertEqual(len(paths), 10)
+        for path in paths:
+            self.assertIn(f'<script src="/tweet-metrics.js?v={version}" defer></script>', path.read_text(),
+                          f'{path.relative_to(ROOT)} must use the current script hash to avoid stale cached UI')
+
     def test_mapping(self):
         ids = s.ids_from_config(json.loads((ROOT / 'data/social-sources.json').read_text()))
         self.assertEqual(len(ids['youtube']), 7)
