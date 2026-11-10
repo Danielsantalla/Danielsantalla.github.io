@@ -6,4 +6,4 @@ All videos, fonts and images are local to this repository. No API tokens or fict
 
 All rights to artwork and media remain with their respective owners. No open-source license is granted.
 
-The proposed social integration and activation checklist are documented in [docs/social-integration.md](docs/social-integration.md). It keeps API credentials in Actions secrets and generates expiring public data only in deployment artifacts.
+The social integration and operating instructions are documented in [docs/social-integration.md](docs/social-integration.md). It keeps API credentials in Actions secrets and generates public snapshots only in deployment artifacts.

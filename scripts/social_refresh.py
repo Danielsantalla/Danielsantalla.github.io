@@ -19,9 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class APIError(Exception):
-    def __init__(self, reason='unavailable'):
+    def __init__(self, reason='unavailable', status=None):
         # Deliberately never retain response bodies, URLs or credential values.
         self.reason = reason
+        self.status = status
         super().__init__(reason)
 
 
@@ -49,7 +50,7 @@ def request_json(url, params=None, headers=None):
                 reason = 'disabled'
         except (ValueError, AttributeError, TypeError, OSError, http.client.HTTPException):
             pass
-        raise APIError(reason) from None
+        raise APIError(reason, error.code) from None
     except (OSError, ValueError, TypeError, http.client.HTTPException):
         raise APIError() from None
 
@@ -194,7 +195,9 @@ def valid_cache(cache, ids, now):
             entry = entries.get(id)
             try:
                 updated = datetime.fromisoformat(entry['updated_at'].replace('Z', '+00:00'))
-                if not timedelta(0) <= now - updated < MAX_AGE:
+                age = now - updated
+                one_time = platform == 'x' and entry.get('mode') == 'one_time'
+                if age < timedelta(0) or (not one_time and age >= MAX_AGE):
                     continue
                 # Cache is our public deployment, never an API fallback on refresh.
                 if entry.get('source_url') != source(platform, id) or not isinstance(entry.get('metrics'), dict):
@@ -202,6 +205,26 @@ def valid_cache(cache, ids, now):
                 result[platform][id] = entry
             except (KeyError, TypeError, ValueError, AttributeError):
                 continue
+    return result
+
+
+def remove_x_entries(entries, removals):
+    """Apply operator-requested removal without contacting or charging X."""
+    if not isinstance(removals, dict):
+        raise ValueError('Invalid X removal list')
+    lists = [removals.get(key, []) for key in ('post_ids', 'author_ids')]
+    for values in lists:
+        if not isinstance(values, list) or any(not isinstance(v, str) or not re.fullmatch(r'\d{1,25}', v) for v in values):
+            raise ValueError('Invalid X removal ID')
+    post_ids, author_ids = map(set, lists)
+    result = {}
+    for id, entry in entries.items():
+        if id in post_ids:
+            continue
+        clean = dict(entry)
+        clean['comments'] = [c for c in entry.get('comments', [])
+            if isinstance(c, dict) and c.get('id') not in post_ids and c.get('author_id') not in author_ids]
+        result[id] = clean
     return result
 
 
@@ -240,17 +263,21 @@ def main():
     args = parser.parse_args()
     now = datetime.now(UTC)
     ids = ids_from_config(json.loads((ROOT / 'data/social-sources.json').read_text()))
-    report = {}
+    try:
+        cache = request_json(CACHE_URL)
+    except APIError:
+        cache = {}
+    platforms = valid_cache(cache, ids, now)
+    report = {platform: 'cache-only (no social API requests)' for platform in platforms}
     if args.refresh:
-        platforms = {'youtube': fail_closed(youtube, ids['youtube'], os.getenv('YOUTUBE_API_KEY', ''), now, report=report),
-                     'x': fail_closed(x_posts, ids['x'], os.getenv('X_TOKEN', ''), os.getenv('X_ENABLED', '').lower() == 'true', now, report=report)}
-    else:
-        try:
-            cache = request_json(CACHE_URL)
-        except APIError:
-            cache = {}
-        platforms = valid_cache(cache, ids, now)
-        report = {platform: 'cache-only (no social API requests)' for platform in platforms}
+        # X is never fetched or renewed by source pushes or scheduled refreshes.
+        platforms['youtube'] = fail_closed(youtube, ids['youtube'], os.getenv('YOUTUBE_API_KEY', ''), now, report=report)
+    removals_path = ROOT / 'data/x-removals.json'
+    try:
+        removals = json.loads(removals_path.read_text())
+        platforms['x'] = remove_x_entries(platforms['x'], removals)
+    except (OSError, ValueError, TypeError):
+        platforms['x'] = {}  # Malformed removal instructions must fail closed.
     payload = {'schema_version': 1, 'generated_at': stamp(now), 'refresh_interval_days': 7,
                'max_age_days': 14, **platforms}
     args.output.parent.mkdir(parents=True, exist_ok=True)

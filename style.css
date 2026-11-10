@@ -78,9 +78,13 @@
 .platform-panel>.conversation-source{display:inline-block;margin-top:10px}
 .sample-comment p{white-space:pre-wrap;overflow-wrap:anywhere}
 .sample-avatar{object-fit:cover}
-.x-reply{margin:16px 0;max-width:100%;overflow-wrap:anywhere}
-.x-embed{max-width:100%}
-.platform-conversation .load-embed{font-size:11px}
+.x-panel-brand{font-size:28px;line-height:1;margin:4px 0 18px;color:#333}
+.x-comment>div{min-width:0}
+.x-comment .sample-avatar{width:24px;height:24px}
+.x-comment .sample-byline a{display:flex;gap:8px;flex-wrap:wrap;text-decoration:none}
+.x-comment .x-username{color:#777}
+.x-comment-meta{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.x-comment .x-comment-text a{font-size:inherit;text-decoration:underline}
 .platform-conversation button:focus-visible,.platform-conversation a:focus-visible,.platform-conversation summary:focus-visible{outline:2px solid #777;outline-offset:4px}
 
 .social-legal{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 0;font-size:11px;color:#777}

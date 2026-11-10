@@ -1,4 +1,4 @@
-/* Public, same-origin API cache. X embeds are loaded only after explicit consent. */
+/* Public, same-origin API snapshots. No social widgets or embedded posts. */
 (async () => {
   'use strict';
   const slots = [...document.querySelectorAll('[data-tweet-metrics]')];
@@ -33,9 +33,9 @@
       return url.protocol === 'https:' && !url.username && !url.password && !url.port && hosts.includes(url.hostname) && (!path || path.test(url.pathname)) ? url.href : null;
     } catch { return null; }
   };
-  const fresh = entry => {
+  const fresh = (entry, platform) => {
     const date = typeof entry?.updated_at === 'string' ? Date.parse(entry.updated_at) : NaN;
-    return Number.isFinite(date) && date <= Date.now() && Date.now() - date <= MAX_AGE;
+    return Number.isFinite(date) && date <= Date.now() && (platform === 'x' && entry.mode === 'one_time' || Date.now() - date < MAX_AGE);
   };
   const fields = {
     x: [['like_count','likes'],['reply_count','replies'],['retweet_count','reposts'],['quote_count','quotes'],['impression_count','views']],
@@ -43,19 +43,79 @@
   };
   const metrics = (entry, platform) => fields[platform].filter(([key]) => Number.isSafeInteger(entry?.metrics?.[key]) && entry.metrics[key] >= 0);
   const dateLabel = value => new Date(value).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:'UTC'});
-  let widgetPromise;
-  function loadWidgets() {
-    if (widgetPromise) return widgetPromise;
-    widgetPromise = new Promise((resolve, reject) => {
-      if (window.twttr?.widgets?.createTweet) return resolve(window.twttr.widgets);
-      const script = element('script');
-      const timer = setTimeout(() => reject(new Error('X unavailable')), 15000);
-      script.src = 'https://platform.twitter.com/widgets.js'; script.async = true;
-      script.onload = () => { clearTimeout(timer); window.twttr?.widgets?.createTweet ? resolve(window.twttr.widgets) : reject(new Error('X unavailable')); };
-      script.onerror = () => { clearTimeout(timer); reject(new Error('X unavailable')); };
-      document.head.append(script);
-    });
-    return widgetPromise;
+  const validX = c => c && xId(c.id) && xId(c.author_id) &&
+    typeof c.author === 'string' && c.author.trim() && typeof c.text === 'string' && c.text.trim() &&
+    typeof c.username === 'string' && /^[A-Za-z0-9_]{1,15}$/.test(c.username) &&
+    safeURL(c.author_image_url, ['pbs.twimg.com', 'abs.twimg.com']) &&
+    safeURL(c.author_url, ['x.com'], new RegExp(`^/${c.username}/?$`, 'i')) &&
+    typeof c.published_at === 'string' && Number.isFinite(Date.parse(c.published_at));
+  function xText(comment) {
+    const p = element('p', 'x-comment-text'), text = comment.text, spans = [];
+    // X entity indices can refer to Unicode code points. Accept UTF-16 offsets
+    // only when the exact entity text agrees; never splice an unverified range.
+    const points = Array.from(text), offsets = [0];
+    points.forEach(point => offsets.push(offsets[offsets.length - 1] + point.length));
+    const entities = comment.entities || {};
+    for (const kind of ['urls', 'mentions', 'hashtags', 'cashtags']) {
+      for (const entity of Array.isArray(entities[kind]) ? entities[kind] : []) {
+        if (!entity || typeof entity !== 'object') continue;
+        let token, href;
+        if (kind === 'urls') {
+          token = entity.url;
+          try {
+            const url = new URL(entity.url);
+            if (url.protocol === 'https:' && !url.username && !url.password) href = url.href;
+          } catch { /* Keep unsafe links as plain text. */ }
+        } else if (kind === 'mentions' && /^[A-Za-z0-9_]{1,15}$/.test(entity.username || '')) {
+          token = '@' + entity.username; href = 'https://x.com/' + entity.username;
+        } else if ((kind === 'hashtags' || kind === 'cashtags') && typeof entity.tag === 'string' && /^[\p{L}\p{N}_]+$/u.test(entity.tag)) {
+          token = (kind === 'hashtags' ? '#' : '$') + entity.tag;
+          href = kind === 'hashtags' ? 'https://x.com/hashtag/' + encodeURIComponent(entity.tag) : 'https://x.com/search?q=' + encodeURIComponent(token);
+        }
+        if (!href || typeof token !== 'string' || !token) continue;
+        const start = entity.start, end = entity.end;
+        let range;
+        if (Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start) {
+          for (const [a,b] of [[offsets[start],offsets[end]],[start,end]]) {
+            if (Number.isInteger(a) && Number.isInteger(b) && text.slice(a,b) === token) { range = [a,b]; break; }
+          }
+        }
+        // Without reliable indices link only an unambiguous exact occurrence.
+        if (!range) {
+          const a = text.indexOf(token);
+          if (a >= 0 && text.indexOf(token, a + 1) < 0) range = [a,a + token.length];
+        }
+        if (range) spans.push({start:range[0],end:range[1],href,label:kind === 'urls' && typeof entity.display_url === 'string' ? entity.display_url : undefined});
+      }
+    }
+    let cursor = 0;
+    for (const span of spans.sort((a,b) => a.start - b.start)) {
+      if (span.start < cursor) continue;
+      p.append(document.createTextNode(text.slice(cursor,span.start)),link(span.href,span.label || text.slice(span.start,span.end)));
+      cursor = span.end;
+    }
+    p.append(document.createTextNode(text.slice(cursor)));
+    return p;
+  }
+  function xComment(comment) {
+    const article = element('article', 'sample-comment x-comment');
+    const avatarLink = link(comment.author_url, '');
+    const avatar = element('img', 'sample-avatar');
+    avatar.src = safeURL(comment.author_image_url, ['pbs.twimg.com', 'abs.twimg.com']);
+    avatar.alt = ''; avatar.loading = 'lazy'; avatar.referrerPolicy = 'no-referrer';
+    avatarLink.setAttribute('aria-label', comment.author + ' on X'); avatarLink.append(avatar);
+    const body = element('div'), byline = element('div', 'sample-byline');
+    const author = link(comment.author_url, '');
+    author.append(element('strong', '', comment.author),element('span', 'x-username', '@' + comment.username));
+    byline.append(author);
+    const footer = element('div', 'x-comment-meta');
+    const postURL = source('x', comment.id);
+    const dated = link(postURL, ''), time = element('time', '', dateLabel(comment.published_at));
+    time.dateTime = comment.published_at; dated.append(time);
+    footer.append(dated,link(postURL,'View on X ↗'));
+    if (Array.isArray(comment.edit_history_tweet_ids) && comment.edit_history_tweet_ids.filter(xId).length > 1) footer.append(link(postURL, 'Edited'));  
+    body.append(byline,xText(comment),footer); article.append(avatarLink,body);
+    return article;
   }
   let cache = {schema_version:1, x:{}, youtube:{}};
   const controller = new AbortController();
@@ -73,7 +133,7 @@
     const platforms = ['x','youtube'].filter(platform => ids[platform]);
     const get = platform => {
       const entry = ids[platform] && cache[platform]?.[ids[platform]];
-      return fresh(entry) ? entry : null;
+      return fresh(entry, platform) ? entry : null;
     };
     const isList = !!slot.closest('.lesson-list');
     let selectedPlatform;
@@ -89,7 +149,7 @@
           const row = element('span', 'platform-stat-line');
           row.append(element('strong', '', platform === 'x' ? 'X' : 'YouTube'));
           for (const [key,label] of available) row.append(element('span','',`${entry.metrics[key].toLocaleString('en-US')} ${label}`));
-          row.title = `Updated ${dateLabel(entry.updated_at)} (UTC)`;
+          row.title = platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC)`;
           slot.append(row);
         }
         slot.hidden = !slot.childNodes.length;
@@ -111,6 +171,11 @@
         button.setAttribute('aria-controls',panel.id); panel.setAttribute('aria-labelledby',button.id);
         tabs.append(button); buttons.push(button); panels.push(panel);
         const entry = get(platform), available = metrics(entry, platform);
+        if (platform === 'x') {
+          const brand = element('div', 'x-panel-brand');
+          const logo = element('img'); logo.src = '/assets/x-logo.svg'; logo.alt = 'X'; logo.width = 18; logo.height = 18;
+          brand.setAttribute('aria-label', 'X'); brand.append(logo); panel.append(brand);
+        }
         if (available.length) {
           const stats = element('div','platform-metrics');
           for (const [key,name] of available) {
@@ -119,13 +184,13 @@
           panel.append(stats);
         }
         if (entry) {
-          const updated = element('time','sample-note',`Updated ${dateLabel(entry.updated_at)} (UTC) · refreshed weekly`); updated.dateTime = entry.updated_at; panel.append(updated);
+          const updated = element('time','sample-note',platform === 'x' ? `Snapshot from ${dateLabel(entry.updated_at)} (UTC), not live` : `Updated ${dateLabel(entry.updated_at)} (UTC) · refreshed weekly`); updated.dateTime = entry.updated_at; panel.append(updated);
         }
         if (!ids[platform]) panel.append(element('p','sample-note',`No ${label} source linked for this tutorial.`));
         else if (!entry) panel.append(element('p','sample-note',`${label} statistics and comments are currently unavailable.`));
         if (entry) {
           const comments = Array.isArray(entry.comments) ? entry.comments : [];
-          const valid = comments.filter(c => c && (platform === 'x' ? xId(c.id) : commentId(c.id) && typeof c.text === 'string' && typeof c.author === 'string'));
+          const valid = comments.filter(c => c && (platform === 'x' ? validX(c) : commentId(c.id) && typeof c.text === 'string' && typeof c.author === 'string'));
           if (valid.length) {
             panel.append(element('p','sample-note',platform === 'x' ? 'Replies from the original conversation on X.' : 'Recent comments from YouTube. Comments belong to their authors.'));
             let more;
@@ -147,28 +212,9 @@
                 body.append(byline,element('p','',comment.text),link(`${source(platform,ids[platform])}&lc=${encodeURIComponent(comment.id)}`,'View on YouTube ↗'));
                 article.append(avatar,body); target.append(article);
               } else {
-                const article = element('div','x-reply'); article.dataset.postId = comment.id;
-                article.append(link(source('x',comment.id),'View reply on X ↗')); target.append(article);
+                target.append(xComment(comment));
               }
             });
-            if (platform === 'x') {
-              const consent = element('p','sample-note','Loading replies contacts X and allows its embedded content to use cookies and receive your IP address.');
-              const load = element('button','load-embed','Load X replies'); load.type = 'button';
-              load.addEventListener('click', async () => {
-                if (load.disabled) return;
-                load.disabled = true; load.textContent = 'Loading X replies…';
-                try {
-                  const widgets = await loadWidgets();
-                  if (!fresh(entry) || !panel.isConnected) return;
-                  const loaded = await Promise.all([...panel.querySelectorAll('.x-reply')].map(async reply => {
-                    const embed = element('div','x-embed'); reply.append(embed);
-                    try { return !!await widgets.createTweet(reply.dataset.postId,embed,{dnt:true,conversation:'none',align:'left'}); } catch { return false; }
-                  }));
-                  load.textContent = loaded.every(Boolean) ? 'X replies loaded.' : 'Some replies could not load. Use the source links below.';
-                } catch { load.textContent = 'X replies could not load. Use the source links below.'; }
-              });
-              panel.insertBefore(consent,panel.querySelector('.x-reply')); panel.insertBefore(load,panel.querySelector('.x-reply'));
-            }
           } else panel.append(element('p','sample-note',entry.comments_status === 'disabled' ? 'Comments are disabled on this video.' : 'No comments are available in this snapshot.'));
         }
         if (ids[platform]) panel.append(link(source(platform,ids[platform]),`Join the conversation on ${label} ↗`));
@@ -192,14 +238,14 @@
       });
       slot.append(tabs,...panels);
       // Prefer a platform with fresh data.
-      const firstFresh = platforms.findIndex(platform => fresh(cache[platform]?.[ids[platform]]));
+      const firstFresh = platforms.findIndex(platform => fresh(cache[platform]?.[ids[platform]], platform));
       const previous = platforms.indexOf(selectedPlatform);
       const fallback = Math.max(0, platforms.indexOf('youtube'));
       select(previous >= 0 ? previous : (firstFresh < 0 ? fallback : firstFresh));
     }
     render();
     // Remove a snapshot if it becomes stale while this page remains open.
-    const expiries = platforms.map(p => cache[p]?.[ids[p]]).filter(e => fresh(e)).map(e => Date.parse(e.updated_at)+MAX_AGE-Date.now()+1);
+    const expiries = platforms.filter(p => !(p === 'x' && cache[p]?.[ids[p]]?.mode === 'one_time')).map(p => cache[p]?.[ids[p]]).filter(e => fresh(e)).map(e => Date.parse(e.updated_at)+MAX_AGE-Date.now()+1);
     expiries.forEach(delay => setTimeout(render,Math.max(1,delay)));
   });
 })();

@@ -22,7 +22,7 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const slot=new Node('div');slot.dataset={tweetMetrics:x,youtubeId:yt};slot.list=list;
  slot.setAttribute('aria-label','Engagement on X');
  const head=new Node('head'),timers=[];
- const document={head,querySelectorAll:()=>[slot],createElement:t=>new Node(t)};
+ const document={head,querySelectorAll:()=>[slot],createElement:t=>new Node(t),createTextNode:text=>{const n=new Node('#text');n.textContent=text;return n;}};
  let requests=[];
  const context={document,window:{},URL,AbortController,Date,Number,Promise,console,setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;},clearTimeout:()=>{},fetch:async(url)=>{requests.push(url);if(fail)throw Error('offline');return {ok:true,json:async()=>data}}};
  await vm.runInNewContext(script,context);
@@ -36,9 +36,49 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  assert.equal(r.slot.querySelectorAll('.sample-comment').length,5);assert.equal(r.slot.querySelectorAll('.sample-avatar').filter(n=>n.tag==='img').length,0);
  const panels=r.slot.querySelectorAll('.platform-panel');assert.equal(panels[0].hidden,true);assert.equal(panels[1].hidden,false);
  const buttons=r.slot.querySelector('.platform-tabs').children;buttons[1].events.keydown({key:'Home',preventDefault(){}});assert.equal(panels[0].hidden,false);assert(buttons[0].focused);buttons[0].events.click();assert.equal(r.slot.querySelectorAll('.sample-comment').length,5);
- r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:4,reply_count:null},comments:[{id:'45678'},{id:'javascript:bad'}]}},youtube:{}});
- assert.equal(r.head.children.length,0);assert.equal(r.slot.querySelectorAll('.x-reply').length,1);
- const load=r.slot.querySelector('.load-embed');const pending=load.events.click();assert.equal(r.head.children.length,1);await load.events.click();assert.equal(r.head.children.length,1);r.head.children[0].onerror();await pending;assert(load.textContent.includes('could not load'));
+
+ const xc={id:'45678',author_id:'777',author:'Real <Author>',username:'real_author',author_url:'https://x.com/real_author',author_image_url:'https://pbs.twimg.com/profile_images/avatar.jpg',text:'Hello <script>bad</script> 😀 @friend https://t.co/abc #Art $USD',published_at:now,source_url:'https://x.com/real_author/status/45678',entities:{mentions:[{username:'friend',start:28,end:35}],urls:[{url:'https://t.co/abc',expanded_url:'https://example.com/story'}],hashtags:[{tag:'Art'}],cashtags:[{tag:'USD'}]}};
+ const snapshot={mode:'one_time',updated_at:old,metrics:{like_count:4,reply_count:null},comments:[xc]};
+ r=await run({schema_version:1,x:{'12345':snapshot},youtube:{}});
+ assert.equal(r.head.children.length,0);assert.equal(r.slot.querySelectorAll('.x-comment').length,1);
+ assert.equal(r.slot.querySelectorAll('.load-embed').length,0);assert(r.slot.textContent.includes('not live'));assert(!r.slot.textContent.includes('refreshed weekly'));
+ assert.equal(r.slot.querySelector('.platform-panel').hidden,false);
+ const xcomment=r.slot.querySelector('.x-comment');
+ assert.equal(xcomment.querySelector('.sample-avatar').src,xc.author_image_url);assert.equal(xcomment.querySelector('.sample-avatar').referrerPolicy,'no-referrer');
+ assert(xcomment.textContent.includes('Real <Author>'));assert(xcomment.textContent.includes('@real_author'));assert(xcomment.textContent.includes('View on X'));
+ const textNode=xcomment.querySelector('.x-comment-text');
+ assert.equal(textNode.children.map(n=>n.textContent).join(''),xc.text);
+ const textLinks=textNode.children.filter(n=>n.tag==='a');assert.equal(textLinks.length,4);assert(textLinks.some(n=>n.href==='https://t.co/abc'));
+ assert.equal(r.slot.querySelectorAll('.x-panel-brand').length,1);
+ assert(!r.timers.some(t=>t.ms>10000),'one-time snapshots have no expiry timer');
+ const xTabs=r.slot.querySelector('.platform-tabs').children;for(let i=0;i<3;i++){xTabs[1].events.click();xTabs[0].events.click();}
+ assert.equal(r.slot.querySelectorAll('.x-comment').length,1);
+ for(const changes of [{author:''},{author_id:''},{username:''},{author_image_url:'javascript:alert(1)'},{author_image_url:'https://pbs.twimg.com.evil.test/a'},{author_image_url:'https://user:pass@pbs.twimg.com/a'},{author_url:'https://evil.test/real_author'},{published_at:'bad'},{id:'bad'},{text:null}]){
+   r=await run({schema_version:1,x:{'12345':{...snapshot,comments:[{...xc,...changes}]}},youtube:{}});
+   assert.equal(r.slot.querySelectorAll('.x-comment').length,0);assert(r.slot.textContent.includes('4'));
+ }
+ // Both exact UTF-16 and Unicode codepoint entity offsets preserve original text.
+ for(const start of [3,2]){
+   const text='😀 @friend and @friend';
+   r=await run({schema_version:1,x:{'12345':{...snapshot,comments:[{...xc,text,entities:{mentions:[{username:'friend',start,end:start+7}]}}]}},youtube:{}});
+   const p=r.slot.querySelector('.x-comment-text');assert.equal(p.children.map(n=>n.textContent).join(''),text);assert.equal(p.children.filter(n=>n.tag==='a').length,1);
+ }
+ // Unsafe URLs, invalid entities and ambiguous fallback stay literal, not HTML.
+ const unsafeText='https://t.co/x @friend @friend <img src=x onerror=bad>';
+ r=await run({schema_version:1,x:{'12345':{...snapshot,comments:[{...xc,text:unsafeText,entities:{urls:[{url:'https://t.co/x',expanded_url:'javascript:alert(1)'},null],mentions:[{username:'friend',start:99,end:106}],hashtags:[null,{tag:'<bad>'}]}}]}},youtube:{}});
+ assert.equal(r.slot.querySelector('.x-comment-text').children.filter(n=>n.tag==='a').length,1);
+ assert.equal(r.slot.querySelector('.x-comment-text').children.find(n=>n.tag==='a').href,'https://t.co/x');
+ assert.equal(r.slot.querySelector('.x-comment-text').children.map(n=>n.textContent).join(''),unsafeText);
+ r=await run({schema_version:1,x:{'12345':{...snapshot,comments:[{...xc,author_image_url:'https://abs.twimg.com/default.png'}]}},youtube:{}});
+ assert.equal(r.slot.querySelectorAll('.x-comment').length,1);
+ // One-time retention applies only to X and requires a valid, nonfuture timestamp.
+ for(const updated_at of ['bad',new Date(Date.now()+864e5).toISOString()]){
+   r=await run({schema_version:1,x:{'12345':{...snapshot,updated_at}},youtube:{}});assert.equal(r.slot.querySelectorAll('.x-comment').length,0);
+ }
+ r=await run({schema_version:1,x:{'12345':{...snapshot,mode:undefined}},youtube:{}});assert.equal(r.slot.querySelectorAll('.x-comment').length,0);
+ r=await run({schema_version:1,x:{},youtube:{abcdefghijk:{...yt,mode:'one_time',updated_at:old}}});assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);
+ r=await run({schema_version:1,x:{'12345':snapshot},youtube:{}},{list:true});assert(r.slot.querySelector('.platform-stat-line').title.includes('not live'));
+ assert(!script.includes('innerHTML'));assert(!script.includes('widgets.js'));assert(!script.includes('createTweet'));
  r=await run({schema_version:1,x:{'12345':{updated_at:now,metrics:{like_count:12}}},youtube:{abcdefghijk:yt}},{list:true});assert.equal(r.slot.querySelectorAll('.platform-stat-line').length,2);assert.equal(r.slot.hidden,false);assert(r.slot.textContent.includes('20 views'));assert.equal(r.slot.beforeNodes,undefined);assert.equal(r.slot.afterNodes[0].className,'social-legal');assert(r.slot.afterNodes[0].textContent.includes('YouTube terms'));
  r=await run({schema_version:1,x:{},youtube:{}},{list:true});assert.equal(r.slot.hidden,true);assert.equal(r.slot.attributes['aria-label'],undefined);
  r=await run({schema_version:1,x:{},youtube:{abcdefghijk:yt}},{list:true});assert.equal(r.slot.attributes['aria-label'],undefined);assert(r.slot.textContent.includes('YouTube'));assert(r.slot.textContent.includes('20 views'));
@@ -65,5 +105,5 @@ async function run(data,{list=false,x='12345',yt='abcdefghijk',fail=false}={}){
  const expiry=r.timers.find(t=>t.ms>1 && t.ms<10000);assert(expiry,'expiry timer must be scheduled');
  const actualNow=Date.now();r.context.Date=class extends Date{static now(){return actualNow+20000;}};expiry.fn();
  assert.equal(r.slot.querySelectorAll('.sample-comment').length,0);assert(r.slot.textContent.includes('currently unavailable'));assert(r.slot.textContent.includes('YouTube terms'));
- console.log('PASS: unavailable, stale, zero-vs-missing, unsafe text/URLs, comments, tabs, X consent/repeat/failure, direct YouTube statistics/comments/listing, no remote avatars, reload/repeat/expiry, no sources/offline');
+ console.log('PASS: unavailable, stale, zero-vs-missing, unsafe text/URLs, comments, tabs, custom X metadata/security/entities/one-time retention, direct YouTube statistics/comments/listing, no remote YouTube avatars, reload/repeat/expiry, no sources/offline');
 })().catch(e=>{console.error(e);process.exitCode=1});

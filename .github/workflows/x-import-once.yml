@@ -1,0 +1,54 @@
+name: Import X once and publish
+on:
+  workflow_dispatch:
+    inputs:
+      approval:
+        description: 'Type x-import-2026-11-10 to use at most $1.40 USD once for comments and authors; no automatic X refresh'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.approval == 'x-import-2026-11-10'
+    permissions:
+      contents: write # Atomically create the one-time attempt tag, not code changes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline tests before any paid requests
+        run: python -m unittest discover -s tests -v && node --check tweet-metrics.js && node tests/test_social_ui.cjs
+      - name: Build public files and preserve unexpired YouTube data
+        run: python scripts/build_site.py _site && python scripts/social_refresh.py --output _site/data/social.json
+      - name: Claim one-time attempt and fetch bounded X sample
+        env:
+          X_TOKEN: ${{ secrets.X_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          X_ONCE_APPROVAL: ${{ inputs.approval }}
+        run: python scripts/x_once.py --output _site/data/social.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          retention-days: 1
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
